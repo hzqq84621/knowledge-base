@@ -40,17 +40,47 @@ def templates():
 @manager.route('/list', methods=['GET'])  # noqa: F821
 @login_required
 def canvas_list():
-    query_params = request.json
-    filters = {}
-    if 'catalog' in query_params:
-        filters['catalog'] = query_params['catalog']
-    if 'is_virtual' in query_params:
-        filters['is_virtual'] = query_params['is_virtual']
-    if 'id' in query_params:
-        filters['id'] = query_params['id']
-    return get_json_result(data=sorted([c.to_dict() for c in \
-                                 UserCanvasService.query(user_id=current_user.id,**filters)], key=lambda x: x["update_time"]*-1)
-                           )
+    try:
+        # 尝试从请求中获取查询参数
+        query_params = request.json or {}  # 如果request.json为None，使用空字典
+        filters = {}
+        
+        # 构建过滤条件
+        if query_params and 'catalog' in query_params:
+            filters['catalog'] = query_params['catalog']
+        if query_params and 'is_virtual' in query_params:
+            filters['is_virtual'] = query_params['is_virtual']
+        if query_params and 'id' in query_params:
+            filters['id'] = query_params['id']
+        
+        # 查询数据库
+        canvas_list = UserCanvasService.query(user_id=current_user.id, **filters)
+        
+        # 确保查询结果存在
+        if not canvas_list:
+            logging.warning(f"未找到满足条件的助理: user_id={current_user.id}, filters={filters}")
+            return get_json_result(data=[])
+        
+        # 转换为字典列表并排序
+        result = []
+        for c in canvas_list:
+            try:
+                # 确保每个canvas对象可以正确转换为字典
+                canvas_dict = c.to_dict()
+                result.append(canvas_dict)
+            except Exception as e:
+                logging.error(f"canvas对象转换为字典时出错: {e}")
+                # 跳过出错的对象，继续处理其他对象
+                continue
+        
+        # 按更新时间倒序排序
+        if result:
+            result = sorted(result, key=lambda x: x.get("update_time", 0) * -1)
+        
+        return get_json_result(data=result)
+    except Exception as e:
+        logging.exception(f"canvas_list接口异常: {e}")
+        return get_json_result(data=[], message=f"获取助理列表失败: {str(e)}")
 
 
 @manager.route('/rm', methods=['POST'])  # noqa: F821
@@ -392,7 +422,7 @@ def get_by_catalog():
 
 @manager.route('/get_new_catalog', methods=['GET'])  # noqa: F821
 @login_required
-def get_by_catalog():
+def get_new_catalog():
     
     return get_json_result(''.join(random.choice("123456789abcdefghijklmnopqrstuvwxyz") for i in range(16)))
 

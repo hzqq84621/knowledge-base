@@ -138,4 +138,5 @@ export default {
   testDbConnect: `${api_host}/canvas/test_db_connect`,
   getInputElements: `${api_host}/canvas/input_elements`,
   debug: `${api_host}/canvas/debug`,
+  getNewCatalog: `${api_host}/canvas/get_new_catalog`,
 };

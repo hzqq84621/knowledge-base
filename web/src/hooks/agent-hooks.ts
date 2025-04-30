@@ -101,19 +101,58 @@ export const useFetchAgentList = () => {
           keywords: '',
         });
 
-        console.log('API响应数据:', data);
+        console.log('获取Agent列表API响应数据:', data);
 
         // 确保返回正确的数据
         if (data?.code === 0 && data?.data) {
           // 如果响应中有kbs字段，使用它
-          const items = data.data.kbs || data.data.items || data.data || [];
-          console.log('转换后的Agent列表:', items);
-          return items;
+          let items = data.data.kbs || data.data.items || data.data || [];
+
+          console.log('原始列表项目总数:', items.length);
+
+          // 显示前5个项目的详情，用于分析
+          console.log('前5个项目的关键字段:');
+          items.slice(0, 5).forEach((item, index) => {
+            console.log(`项目 ${index}:`, {
+              id: item.id,
+              title: item.title,
+              is_virtual: item.is_virtual,
+              has_dsl: !!item.dsl,
+            });
+          });
+
+          // 根据is_virtual字段过滤 - 只保留is_virtual=true的项目（助理）
+          const assistantItems = items.filter((item: any) => {
+            // 使用is_virtual字段判断
+            if (
+              item.is_virtual === true ||
+              item.is_virtual === 'true' ||
+              item.is_virtual === 1
+            ) {
+              console.log(
+                `项目 ${item.title} 是助理 (is_virtual=${item.is_virtual})`,
+              );
+              return true;
+            } else {
+              console.log(
+                `项目 ${item.title} 是对话 (is_virtual=${item.is_virtual})`,
+              );
+              return false;
+            }
+          });
+
+          console.log('过滤后的助理列表数量:', assistantItems.length);
+          console.log(
+            '过滤后的助理列表:',
+            assistantItems.map((item) => item.title),
+          );
+
+          return assistantItems;
         }
 
         return [];
       } catch (error) {
-        console.error('Error fetching agent list:', error);
+        console.error('获取Agent列表失败:', error);
         return [];
       }
     },
@@ -425,13 +464,24 @@ export const useCreateAgent = () => {
         );
       }
 
-      // 使用与Flow相同的逻辑，但不跳转
+      // 生成一个随机的catalog值
+      const generateCatalog = () => {
+        const chars = '123456789abcdefghijklmnopqrstuvwxyz';
+        let result = '';
+        for (let i = 0; i < 16; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+
       const flowParams: any = {
         title: params.title,
         description: params.description,
         dsl: processedDsl,
         avatar: templateItem?.avatar || '/logo.svg',
         is_private: params.is_private !== undefined ? params.is_private : true, // 默认为私有
+        catalog: generateCatalog(), // 生成一个随机的catalog值
+        is_virtual: 1, // 标记为助理而非对话
       };
 
       // 记录创建时使用的参数，便于后续维护
