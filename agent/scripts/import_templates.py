@@ -3,6 +3,7 @@ import sys
 import json
 import logging
 import argparse
+import subprocess
 from typing import Dict, List, Any
 
 # 配置日志
@@ -19,6 +20,21 @@ sys.path.append(BASE_DIR)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+def check_and_install_dependencies():
+    """检查并安装必要的依赖"""
+    try:
+        import pymysql
+        logger.info("PyMySQL已安装")
+    except ImportError:
+        logger.info("正在安装缺失的依赖: PyMySQL...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "pymysql"])
+            logger.info("PyMySQL安装成功")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"安装PyMySQL失败: {e}")
+            return False
+    return True
+
 def read_json_file(file_path: str) -> Dict[str, Any]:
     """读取JSON文件并返回解析后的内容"""
     try:
@@ -30,6 +46,11 @@ def read_json_file(file_path: str) -> Dict[str, Any]:
 
 def import_templates_using_update_module(template_files: List[str]) -> None:
     """使用update_template模块导入模板"""
+    # 检查并安装所需依赖
+    if not check_and_install_dependencies():
+        logger.error("依赖安装失败，无法继续导入模板")
+        return
+        
     # 更可靠的导入方式
     update_template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "update_template.py")
     

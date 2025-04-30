@@ -478,8 +478,12 @@ def import_template(file_path):
         # 准备DSL数据 - 确保是JSON字符串格式
         dsl_json = json.dumps(template_data.get("dsl", {"reference": []}))
         
-        # 获取avatar字段（如果存在）
+        # 获取avatar字段（如果存在）并截断长度
         avatar = template_data.get("avatar", "")
+        # 检查avatar字段的长度，如果太长就截断或设为空
+        if len(avatar) > 1000:  # 假设数据库限制为1000字符，您可以根据实际情况调整
+            print(f"警告：avatar字段太长 ({len(avatar)} 字符)，将被设置为空")
+            avatar = ""  # 或者您可以选择截断为允许的最大长度
         
         if exists:
             # 更新现有模板

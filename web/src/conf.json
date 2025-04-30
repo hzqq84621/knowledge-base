@@ -1,3 +1,8 @@
 {
-  "appName": "RAGFlow"
+  "appName": "RAGFlow",
+  "api": {
+    "baseUrl": "http://localhost:9380",
+    "version": "v1"
+  },
+  "supportUrl": ""
 }
