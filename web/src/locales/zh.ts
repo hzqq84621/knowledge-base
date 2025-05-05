@@ -106,6 +106,17 @@ export default {
       templateSelection: '请选择模板',
       emptyTemplate: '空白模板',
       fromScratch: '从无到有',
+      deleteConversation: '删除对话',
+      renameConversation: '重命名对话',
+      confirmDeleteConversation: '确认删除对话',
+      confirmDeleteConversationContent:
+        '确定要删除这个对话吗？删除后将无法恢复',
+      noConversations: '暂无对话',
+      conversationTitle: '对话标题',
+      inputConversationTitle: '请输入对话标题',
+      selectConversationFirst: '请先选择一个对话',
+      deleteFailed: '删除失败',
+      updateFailed: '更新失败',
     },
     knowledgeList: {
       welcome: '欢迎回来',

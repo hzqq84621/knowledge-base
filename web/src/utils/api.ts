@@ -126,7 +126,7 @@ export default {
   listTemplates: `${api_host}/canvas/templates`,
   listCanvas: `${api_host}/canvas/list`,
   listCanvasTeam: `${api_host}/canvas/listteam`,
-  getCanvas: `${api_host}/canvas/get`,
+  getCanvas: (canvasId: string) => `${api_host}/canvas/get/${canvasId}`,
   getCanvasSSE: `${api_host}/canvas/getsse`,
   removeCanvas: `${api_host}/canvas/rm`,
   setCanvas: `${api_host}/canvas/set`,

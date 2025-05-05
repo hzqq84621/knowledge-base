@@ -5,7 +5,7 @@ import request from '@/utils/request';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { message } from 'antd';
 import { useCallback, useState } from 'react';
-import { v4 as uuid } from 'uuid';
+import { useTranslation } from 'react-i18next';
 import { useSetModalState } from './common-hooks';
 import { EmptyDsl, useFetchFlowTemplates } from './flow-hooks';
 
@@ -153,6 +153,88 @@ export const useFetchAgentList = () => {
         return [];
       } catch (error) {
         console.error('获取Agent列表失败:', error);
+        return [];
+      }
+    },
+  });
+
+  return {
+    data: data || [],
+    loading,
+    error,
+    refetch,
+  };
+};
+
+// 获取对话列表
+export const useFetchConversationList = (catalog?: string) => {
+  const {
+    data,
+    error,
+    isFetching: loading,
+    refetch,
+  } = useQuery({
+    queryKey: ['fetchConversationList', catalog],
+    queryFn: async () => {
+      try {
+        // 构建查询参数，与获取Agent列表逻辑类似
+        const params: any = {
+          page: 1,
+          page_size: 100,
+          keywords: '',
+        };
+
+        // 如果有catalog参数，添加到查询条件中
+        if (catalog) {
+          params.catalog = catalog;
+          console.log(`使用catalog参数过滤对话列表: ${catalog}`);
+        }
+
+        const { data } = await flowService.listCanvas(params);
+
+        console.log('获取对话列表API响应数据:', data);
+
+        // 确保返回正确的数据
+        if (data?.code === 0 && data?.data) {
+          // 如果响应中有kbs字段，使用它
+          let items = data.data.kbs || data.data.items || data.data || [];
+
+          console.log('原始对话项目总数:', items.length);
+
+          // 根据is_virtual字段过滤 - 只保留is_virtual=false的项目（对话）
+          const conversationItems = items.filter((item: any) => {
+            // 使用is_virtual字段判断
+            if (
+              item.is_virtual === false ||
+              item.is_virtual === 'false' ||
+              item.is_virtual === 0
+            ) {
+              console.log(
+                `项目 ${item.title} 是对话 (is_virtual=${item.is_virtual})`,
+              );
+              return true;
+            } else {
+              console.log(
+                `项目 ${item.title} 是助理 (is_virtual=${item.is_virtual})`,
+              );
+              return false;
+            }
+          });
+
+          console.log('过滤后的对话列表数量:', conversationItems.length);
+          if (conversationItems.length > 0) {
+            console.log(
+              '过滤后的对话列表:',
+              conversationItems.map((item) => item.title),
+            );
+          }
+
+          return conversationItems;
+        }
+
+        return [];
+      } catch (error) {
+        console.error('获取对话列表失败:', error);
         return [];
       }
     },
@@ -707,7 +789,7 @@ export const useCreateAgent = () => {
       return true;
     } catch (error) {
       console.error('设置权限请求失败:', error);
-      message.error('权限设置请求失败');
+      message.error('设置权限请求失败');
       return false;
     }
   };
@@ -779,33 +861,92 @@ export const useDeleteAgent = () => {
 
 // 创建新对话
 export const useCreateConversation = () => {
+  const queryClient = useQueryClient();
   const { isPending: loading, mutateAsync } = useMutation({
     mutationKey: ['createConversation'],
     mutationFn: async ({
       agentId,
-      title = '新对话',
+      title,
+      catalog,
     }: {
       agentId: string;
       title?: string;
+      catalog?: string;
     }) => {
       try {
-        // 使用runCanvas API来创建新对话
-        const { data } = await flowService.runCanvas({
-          id: agentId,
-          title,
-          conversation_id: uuid(), // 生成新的会话ID
-        });
+        console.log('开始创建对话，获取Agent信息...');
+        console.log('Agent ID:', agentId);
 
-        if (data.code === 0) {
-          message.success(i18n.t('message.created'));
-          return data?.data ?? {};
+        // 直接使用API调用获取Agent信息，避免使用可能有问题的flowService.getCanvas
+        const response = await request.get(`/v1/canvas/get/${agentId}`);
+        const agentData = response.data;
+
+        console.log('获取到的Agent数据:', agentData);
+
+        if (agentData.code !== 0 || !agentData.data) {
+          console.error('获取Agent信息失败:', agentData);
+          message.error('获取Agent信息失败');
+          return null;
         }
 
-        return {};
+        // 使用Agent的catalog值
+        const agentCatalog = catalog || agentData.data.catalog;
+
+        if (!agentCatalog) {
+          console.error('Agent没有catalog值:', agentData.data);
+          message.error('无效的Agent配置');
+          return null;
+        }
+
+        // 生成带有时间戳的标题以确保唯一性
+        const timestamp = new Date().getTime();
+        const uniqueTitle = title
+          ? `${title}_${timestamp.toString().slice(-6)}`
+          : `新对话_${timestamp.toString().slice(-6)}`;
+
+        // 用户可见的显示名称 (不带时间戳)
+        const displayTitle = title || '新对话';
+
+        console.log(
+          `创建对话: 唯一标题=${uniqueTitle}, 显示标题=${displayTitle}, catalog=${agentCatalog}`,
+        );
+
+        // 使用setCanvas API创建对话
+        const setData = await flowService.setCanvas({
+          title: uniqueTitle, // 使用唯一标题作为内部ID
+          display_title: displayTitle, // 添加显示标题字段用于显示
+          description: `与${agentData.data.title || 'Agent'}的对话`,
+          dsl: agentData.data.dsl, // 使用相同的DSL
+          is_virtual: false, // 标记为对话而非助理
+          catalog: agentCatalog, // 使用相同的catalog值
+          avatar: agentData.data.avatar, // 使用相同的头像
+        });
+
+        console.log('创建对话API返回:', setData);
+
+        if (setData.data && setData.data.code === 0) {
+          message.success(i18n.t('message.created'));
+
+          // 刷新对话列表
+          queryClient.invalidateQueries({
+            queryKey: ['fetchConversationList', agentCatalog],
+          });
+
+          return {
+            ...setData.data.data,
+            conversation_id: setData.data.data.id, // 保持与原API返回结构兼容
+            agentId: agentId, // 保存关联的agentId
+            title: displayTitle, // 返回用户可读的标题
+          };
+        }
+
+        console.error('创建对话失败:', setData);
+        message.error(setData.data?.message || '创建对话失败');
+        return null;
       } catch (error) {
-        console.error('创建会话失败:', error);
-        message.error('创建会话失败');
-        return {};
+        console.error('创建对话过程中发生错误:', error);
+        message.error('创建对话失败');
+        return null;
       }
     },
   });
@@ -825,6 +966,205 @@ export const useCreateConversation = () => {
   return {
     loading,
     createConversation,
+  };
+};
+
+// 删除对话
+export const useDeleteConversation = () => {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  const { isPending: loading, mutateAsync } = useMutation({
+    mutationKey: ['deleteConversation'],
+    mutationFn: async (params: {
+      conversationId: string;
+      catalog?: string;
+    }) => {
+      try {
+        console.log(`开始删除对话，ID: ${params.conversationId}`);
+
+        // 使用removeCanvas API删除对话
+        const { data } = await flowService.removeCanvas({
+          canvasIds: [params.conversationId],
+        });
+
+        if (data.code === 0) {
+          message.success(t('message.deleted'));
+
+          // 刷新对话列表缓存，如果有catalog则使用它作为query key的一部分
+          if (params.catalog) {
+            queryClient.invalidateQueries({
+              queryKey: ['fetchConversationList', params.catalog],
+            });
+          } else {
+            queryClient.invalidateQueries({
+              queryKey: ['fetchConversationList'],
+            });
+          }
+
+          return true;
+        }
+
+        console.error('删除对话失败:', data);
+        message.error(data?.message || t('message.deleteFailed'));
+        return false;
+      } catch (error) {
+        console.error('删除对话过程中发生错误:', error);
+        message.error(t('message.deleteFailed'));
+        return false;
+      }
+    },
+  });
+
+  const deleteConversation = useCallback(
+    async (conversationId: string, catalog?: string) => {
+      if (!conversationId) {
+        message.warning(t('message.selectConversationFirst'));
+        return false;
+      }
+
+      return await mutateAsync({ conversationId, catalog });
+    },
+    [mutateAsync, t],
+  );
+
+  return {
+    loading,
+    deleteConversation,
+  };
+};
+
+// 重命名对话
+export const useRenameConversation = () => {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  const [conversationToRename, setConversationToRename] = useState<any>(null);
+  const {
+    visible: renameModalVisible,
+    hideModal: hideRenameModal,
+    showModal: showRenameModal,
+  } = useSetModalState();
+
+  const { isPending: loading, mutateAsync } = useMutation({
+    mutationKey: ['renameConversation'],
+    mutationFn: async (params: {
+      conversationId: string;
+      newTitle: string;
+      catalog?: string;
+    }) => {
+      try {
+        console.log(
+          `开始重命名对话，ID: ${params.conversationId}, 新名称: ${params.newTitle}`,
+        );
+
+        // 首先获取当前对话的完整信息
+        const response = await request.get(
+          `/v1/canvas/get/${params.conversationId}`,
+        );
+        const conversationData = response.data;
+
+        if (conversationData.code !== 0 || !conversationData.data) {
+          console.error('获取对话信息失败:', conversationData);
+          message.error('获取对话信息失败');
+          return false;
+        }
+
+        // 准备更新对话数据
+        const originalData = conversationData.data;
+
+        // 生成带有时间戳的标题
+        const timestamp = new Date().getTime();
+        const uniqueTitle = `${params.newTitle}_${timestamp.toString().slice(-6)}`;
+
+        // 创建一个新的对象，只包含后端支持的字段
+        // 注意: 移除了 display_title 字段
+        const updateData = {
+          id: params.conversationId,
+          title: uniqueTitle, // 只使用title字段
+          description: originalData.description,
+          dsl: originalData.dsl,
+          is_virtual:
+            originalData.is_virtual !== undefined
+              ? originalData.is_virtual
+              : false,
+          catalog: originalData.catalog,
+          avatar: originalData.avatar || '/logo.svg',
+        };
+
+        console.log('更新的对话数据:', updateData);
+
+        // 使用setCanvas API更新对话信息
+        const { data } = await flowService.setCanvas(updateData);
+
+        if (data.code === 0) {
+          message.success(t('message.updated'));
+
+          // 刷新对话列表缓存
+          if (params.catalog) {
+            queryClient.invalidateQueries({
+              queryKey: ['fetchConversationList', params.catalog],
+            });
+          } else {
+            queryClient.invalidateQueries({
+              queryKey: ['fetchConversationList'],
+            });
+          }
+
+          return true;
+        }
+
+        console.error('重命名对话失败:', data);
+        message.error(data?.message || t('message.updateFailed'));
+        return false;
+      } catch (error) {
+        console.error('重命名对话过程中发生错误:', error);
+        message.error(t('message.updateFailed'));
+        return false;
+      }
+    },
+  });
+
+  const showRenameModalForConversation = useCallback(
+    (conversation: any) => {
+      setConversationToRename(conversation);
+      showRenameModal();
+    },
+    [showRenameModal],
+  );
+
+  const renameConversation = useCallback(
+    async (newTitle: string, catalog?: string) => {
+      if (!conversationToRename || !conversationToRename.id) {
+        message.warning(t('message.selectConversationFirst'));
+        return false;
+      }
+
+      const result = await mutateAsync({
+        conversationId: conversationToRename.id,
+        newTitle,
+        catalog,
+      });
+
+      if (result) {
+        hideRenameModal();
+      }
+
+      return result;
+    },
+    [mutateAsync, conversationToRename, hideRenameModal, t],
+  );
+
+  return {
+    loading,
+    renameConversation,
+    showRenameModalForConversation,
+    renameModalVisible,
+    hideRenameModal,
+    initialTitle:
+      conversationToRename?.title && conversationToRename.title.includes('_')
+        ? conversationToRename.title.split('_')[0]
+        : conversationToRename?.title || '',
   };
 };
 

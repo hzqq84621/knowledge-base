@@ -12,9 +12,12 @@ import {
   useCreateAgent,
   useCreateConversation,
   useDeleteAgent,
+  useDeleteConversation,
   useFetchAgentList,
+  useFetchConversationList,
+  useRenameConversation,
 } from '@/hooks/agent-hooks';
-import { useTranslate } from '@/hooks/common-hooks';
+import { useShowDeleteConfirm, useTranslate } from '@/hooks/common-hooks';
 import {
   DeleteOutlined,
   EditOutlined,
@@ -46,6 +49,7 @@ import AgentChatContainer from './agent-chat-container';
 import AgentSettingModal from './agent-setting-modal';
 import AgentTemplateModal from './agent-template-modal';
 import styles from './index.less';
+import RenameConversationModal from './rename-conversation-modal';
 
 const { Text } = Typography;
 
@@ -58,6 +62,7 @@ interface IAgent {
   title: string; // Agent名称
   description?: string; // Agent描述（可选）
   avatar?: string; // Agent头像URL（可选）
+  catalog?: string; // Agent的catalog标识符（用于关联对话）
 }
 
 /**
@@ -67,7 +72,8 @@ interface IAgent {
 interface IConversation {
   id: string; // 对话唯一标识
   title: string; // 对话标题
-  agentId: string; // 对话所属的Agent ID
+  agentId?: string; // 对话所属的Agent ID
+  display_title?: string; // 对话显示标题
 }
 
 const AgentChat = () => {
@@ -76,6 +82,9 @@ const AgentChat = () => {
 
   // 当前选中的Agent ID
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+
+  // 当前选中Agent的catalog值
+  const [activeCatalog, setActiveCatalog] = useState<string | null>(null);
 
   // 当前选中的对话ID
   const [activeConversationId, setActiveConversationId] = useState<
@@ -88,6 +97,9 @@ const AgentChat = () => {
   // 获取当前主题和翻译函数
   const { theme } = useTheme();
   const { t } = useTranslate('agent');
+
+  // 显示删除确认对话框
+  const showDeleteConfirm = useShowDeleteConfirm();
 
   /**
    * 创建Agent相关钩子
@@ -111,8 +123,18 @@ const AgentChat = () => {
   const {
     data: agentList, // Agent列表数据
     loading: fetchAgentLoading, // 获取Agent列表的加载状态
-    refetch, // 重新获取Agent列表
+    refetch: refetchAgentList, // 重新获取Agent列表
   } = useFetchAgentList();
+
+  /**
+   * 获取对话列表相关钩子
+   * 提供对话列表数据和加载状态
+   */
+  const {
+    data: conversationList, // 对话列表数据
+    loading: fetchConversationLoading, // 获取对话列表的加载状态
+    refetch: refetchConversationList, // 重新获取对话列表
+  } = useFetchConversationList(activeCatalog || undefined);
 
   /**
    * 删除Agent相关钩子
@@ -131,10 +153,24 @@ const AgentChat = () => {
     useCreateConversation();
 
   /**
-   * 模拟对话数据列表
-   * 实际应用中应该从API获取
+   * 删除对话相关钩子
+   * 提供删除对话功能和加载状态
    */
-  const [conversationList, setConversationList] = useState<IConversation[]>([]);
+  const { loading: deleteConversationLoading, deleteConversation } =
+    useDeleteConversation();
+
+  /**
+   * 重命名对话相关钩子
+   * 提供重命名对话功能和相关状态
+   */
+  const {
+    loading: renameConversationLoading,
+    renameConversation,
+    showRenameModalForConversation,
+    renameModalVisible,
+    hideRenameModal,
+    initialTitle,
+  } = useRenameConversation();
 
   /**
    * 处理搜索输入框变化
@@ -153,18 +189,36 @@ const AgentChat = () => {
    */
   const handleAgentCardClick = useCallback(
     (agentId: string) => () => {
+      // 查找选中的Agent对象
+      const selectedAgent = agentList.find((agent) => agent.id === agentId);
+
       setActiveAgentId(agentId);
+      // 提取并设置catalog值
+      if (selectedAgent && selectedAgent.catalog) {
+        console.log(`选中Agent(${agentId})的catalog: ${selectedAgent.catalog}`);
+        setActiveCatalog(selectedAgent.catalog);
+      } else {
+        console.warn(`选中的Agent(${agentId})没有catalog值`);
+        // 如果没有catalog，可以使用agentId的前16位作为fallback
+        if (agentId && agentId.length >= 16) {
+          const fallbackCatalog = agentId.substring(0, 16);
+          console.log(`使用Agent ID前16位作为catalog: ${fallbackCatalog}`);
+          setActiveCatalog(fallbackCatalog);
+        } else {
+          setActiveCatalog(null);
+        }
+      }
+
       // 重置当前选中的对话
       setActiveConversationId(null);
+
       // 创建新的控制器以便取消之前的请求
       setController((pre) => {
         pre.abort();
         return new AbortController();
       });
-      // 获取该Agent的对话列表
-      // TODO: 这里应该请求API获取对话列表数据
     },
-    [],
+    [agentList],
   );
 
   /**
@@ -195,23 +249,77 @@ const AgentChat = () => {
       );
 
       if (result) {
-        // 创建成功后，添加到会话列表
-        const newConversation: IConversation = {
-          id: result.conversation_id || Date.now().toString(),
-          title: `新对话 ${conversationList.length + 1}`,
-          agentId: activeAgentId,
-        };
-
-        setConversationList((prev) => [...prev, newConversation]);
-
+        // 创建成功后会自动刷新对话列表，不需要手动添加
         // 选中新创建的会话
-        setActiveConversationId(newConversation.id);
+        setActiveConversationId(result.id || result.conversation_id);
       }
     } catch (error) {
       console.error('创建新对话失败:', error);
       message.error(t('createConversationFailed'));
     }
   }, [activeAgentId, conversationList.length, createConversation, t]);
+
+  /**
+   * 处理对话删除操作
+   * 显示确认对话框并执行删除
+   */
+  const handleDeleteConversation = useCallback(
+    (conversationId: string) => (e: React.MouseEvent) => {
+      // 阻止冒泡，避免触发对话卡片点击事件
+      e.stopPropagation();
+
+      // 显示删除确认对话框
+      showDeleteConfirm({
+        title: t('confirmDeleteConversation'),
+        content: t('confirmDeleteConversationContent'),
+        onOk: async () => {
+          // 执行删除操作
+          const success = await deleteConversation(
+            conversationId,
+            activeCatalog || undefined,
+          );
+
+          // 如果删除的是当前选中的对话，清除选择
+          if (success && conversationId === activeConversationId) {
+            setActiveConversationId(null);
+          }
+        },
+      });
+    },
+    [
+      showDeleteConfirm,
+      deleteConversation,
+      activeCatalog,
+      activeConversationId,
+      t,
+    ],
+  );
+
+  /**
+   * 处理对话重命名操作
+   * 打开重命名模态框
+   */
+  const handleRenameConversation = useCallback(
+    (conversation: IConversation) => (e: React.MouseEvent) => {
+      // 阻止冒泡，避免触发对话卡片点击事件
+      e.stopPropagation();
+
+      // 打开重命名模态框
+      showRenameModalForConversation(conversation);
+    },
+    [showRenameModalForConversation],
+  );
+
+  /**
+   * 处理重命名提交
+   * 执行对话重命名操作
+   */
+  const handleRenameOk = useCallback(
+    (newTitle: string) => {
+      renameConversation(newTitle, activeCatalog || undefined);
+    },
+    [renameConversation, activeCatalog],
+  );
 
   /**
    * 确认删除Agent的对话框
@@ -251,10 +359,32 @@ const AgentChat = () => {
    * 确保页面加载后展示最新数据
    */
   useEffect(() => {
-    refetch().then(() => {
+    refetchAgentList().then(() => {
       console.log('获取Agent列表完成');
     });
-  }, [refetch]);
+  }, [refetchAgentList]);
+
+  /**
+   * 当activeCatalog变化时刷新对话列表
+   */
+  useEffect(() => {
+    if (activeCatalog) {
+      console.log(`catalog值变化，重新获取对话列表: ${activeCatalog}`);
+      refetchConversationList();
+    }
+  }, [activeCatalog, refetchConversationList]);
+
+  /**
+   * 查找特定Agent对话
+   * 筛选出与当前选中Agent相关的对话
+   */
+  const filteredConversationList = useMemo(() => {
+    if (!activeCatalog) return [];
+    console.log(
+      `过滤catalog为${activeCatalog}的对话，共${conversationList.length}条`,
+    );
+    return conversationList;
+  }, [activeCatalog, conversationList]);
 
   return (
     <Flex className={styles.agentChatWrapper}>
@@ -265,6 +395,7 @@ const AgentChat = () => {
           <Button type="primary" onClick={showTemplateModal} block>
             {t('createAgent')}
           </Button>
+
           <Divider style={{ margin: '12px 0' }}></Divider>
 
           {/* Agent搜索框 */}
@@ -370,31 +501,44 @@ const AgentChat = () => {
           {/* 对话列表展示区域 */}
           <Flex className={styles.agentConversationContent} vertical gap={8}>
             {activeAgentId ? (
-              conversationList
-                .filter((conv) => conv.agentId === activeAgentId)
-                .map((conversation) => (
-                  <Card
-                    key={conversation.id}
-                    hoverable
-                    className={classNames(styles.agentConversationCard, {
-                      [styles.agentConversationCardSelected]:
-                        conversation.id === activeConversationId,
-                    })}
-                    onClick={handleConversationCardClick(conversation.id)}
-                  >
-                    <Flex align="center" justify="space-between">
-                      <span>{conversation.title}</span>
-                      <Space>
-                        <EditOutlined
-                          className={styles.agentConversationIcon}
-                        />
-                        <DeleteOutlined
-                          className={styles.agentConversationIcon}
-                        />
-                      </Space>
-                    </Flex>
-                  </Card>
-                ))
+              <Spin spinning={fetchConversationLoading}>
+                {filteredConversationList.length > 0 ? (
+                  filteredConversationList.map((conversation) => (
+                    <Card
+                      key={conversation.id}
+                      hoverable
+                      className={classNames(styles.agentConversationCard, {
+                        [styles.agentConversationCardSelected]:
+                          conversation.id === activeConversationId,
+                      })}
+                      onClick={handleConversationCardClick(conversation.id)}
+                    >
+                      <Flex align="center" justify="space-between">
+                        {/* 优先显示display_title，如果没有则尝试处理原始title，移除时间戳部分 */}
+                        <span>
+                          {conversation.display_title ||
+                            (conversation.title &&
+                            conversation.title.includes('_')
+                              ? conversation.title.split('_')[0]
+                              : conversation.title || '新对话')}
+                        </span>
+                        <Space>
+                          <EditOutlined
+                            className={styles.agentConversationIcon}
+                            onClick={handleRenameConversation(conversation)}
+                          />
+                          <DeleteOutlined
+                            className={styles.agentConversationIcon}
+                            onClick={handleDeleteConversation(conversation.id)}
+                          />
+                        </Space>
+                      </Flex>
+                    </Card>
+                  ))
+                ) : (
+                  <Empty description={t('noConversations')} />
+                )}
+              </Spin>
             ) : (
               <Empty description={t('selectAgentFirst')} />
             )}
@@ -425,6 +569,17 @@ const AgentChat = () => {
           hideModal={hideAgentSettingModal}
           onOk={onAgentOk}
           loading={createAgentLoading}
+        />
+      )}
+
+      {/* 对话重命名模态框 */}
+      {renameModalVisible && (
+        <RenameConversationModal
+          visible={renameModalVisible}
+          hideModal={hideRenameModal}
+          onOk={handleRenameOk}
+          initialTitle={initialTitle}
+          loading={renameConversationLoading}
         />
       )}
     </Flex>

@@ -45,6 +45,11 @@ const methods = {
     url: listCanvas,
     method: 'get',
   },
+  // 添加专门用于获取对话列表的函数
+  listConversations: {
+    url: listCanvas, // 复用同一个接口
+    method: 'get',
+  },
   resetCanvas: {
     url: resetCanvas,
     method: 'post',

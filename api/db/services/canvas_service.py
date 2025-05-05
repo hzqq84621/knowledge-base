@@ -90,6 +90,8 @@ class UserCanvasService(CommonService):
                 cls.model.create_time,
                 cls.model.create_date,
                 cls.model.update_date,
+                cls.model.catalog,  # 添加catalog字段
+                cls.model.is_virtual,  # 添加is_virtual字段
                 User.nickname,
                 User.avatar.alias('tenant_avatar'),
             ]

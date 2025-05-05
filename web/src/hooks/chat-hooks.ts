@@ -22,7 +22,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { has, set } from 'lodash';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { history, useSearchParams } from 'umi';
 
 //#region logic
@@ -77,6 +77,7 @@ export const useGetChatSearchParams = () => {
     conversationId:
       currentQueryParameters.get(ChatSearchParams.ConversationId) || '',
     isNew: currentQueryParameters.get(ChatSearchParams.isNew) || '',
+    catalog: currentQueryParameters.get(ChatSearchParams.Catalog) || '', // 添加对catalog的获取
   };
 };
 
@@ -241,28 +242,115 @@ export const useRemoveNextDialog = () => {
 //#region conversation
 
 export const useFetchNextConversationList = () => {
-  const { dialogId } = useGetChatSearchParams();
+  // 获取URL参数中的catalog值
+  const { catalog: urlCatalog, dialogId } = useGetChatSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // 状态用于存储有效的catalog值
+  const [effectiveCatalog, setEffectiveCatalog] = useState<string>(urlCatalog);
+
+  // 查询参数
   const { handleClickConversation } = useClickConversationCard();
+
+  // 当dialogId改变时，尝试获取对应Agent的catalog值
+  useEffect(() => {
+    const fetchAgentCatalog = async () => {
+      // 如果URL中已有catalog，直接使用
+      if (urlCatalog) {
+        setEffectiveCatalog(urlCatalog);
+        return;
+      }
+
+      // 如果有dialogId，尝试获取对应Agent的catalog
+      if (dialogId) {
+        try {
+          console.log(`尝试获取Agent(${dialogId})的catalog值...`);
+          const response = await fetch(`/v1/canvas/get/${dialogId}`);
+          const data = await response.json();
+
+          if (data && data.code === 0 && data.data && data.data.catalog) {
+            const agentCatalog = data.data.catalog;
+            console.log(`获取到Agent(${dialogId})的catalog值: ${agentCatalog}`);
+
+            // 更新URL参数，添加catalog
+            setEffectiveCatalog(agentCatalog);
+
+            // 将catalog添加到URL参数，但不触发路由变化
+            searchParams.set(ChatSearchParams.Catalog, agentCatalog);
+            setSearchParams(searchParams, { replace: true });
+
+            return;
+          }
+        } catch (error) {
+          console.error('获取Agent catalog失败:', error);
+        }
+
+        // 如果无法获取catalog，使用dialogId的前16位作为fallback
+        if (dialogId.length >= 16) {
+          const fallbackCatalog = dialogId.substring(0, 16);
+          console.log(
+            `无法获取Agent catalog，使用dialogId前16位(${fallbackCatalog})作为catalog`,
+          );
+          setEffectiveCatalog(fallbackCatalog);
+
+          // 更新URL参数
+          searchParams.set(ChatSearchParams.Catalog, fallbackCatalog);
+          setSearchParams(searchParams, { replace: true });
+        }
+      }
+    };
+
+    fetchAgentCatalog();
+  }, [dialogId, urlCatalog, searchParams, setSearchParams]);
+
   const {
     data,
     isFetching: loading,
     refetch,
   } = useQuery<IConversation[]>({
-    queryKey: ['fetchConversationList', dialogId],
+    queryKey: ['fetchConversationList', effectiveCatalog],
     initialData: [],
     gcTime: 0,
     refetchOnWindowFocus: false,
-    enabled: !!dialogId,
+    enabled: !!effectiveCatalog, // 只在有effective catalog时执行查询
     queryFn: async () => {
-      const { data } = await chatService.listConversation({ dialogId });
-      if (data.code === 0) {
-        if (data.data.length > 0) {
+      console.log(`查询对话列表，使用catalog: ${effectiveCatalog}`);
+
+      // 构建查询参数，优先使用effectiveCatalog，然后是dialogId
+      const queryParams: any = {};
+
+      if (effectiveCatalog) {
+        queryParams.catalog = effectiveCatalog;
+        console.log(`使用catalog参数: ${effectiveCatalog}`);
+      }
+
+      if (dialogId && !queryParams.catalog) {
+        queryParams.dialogId = dialogId;
+        console.log(`使用dialogId参数: ${dialogId}`);
+      }
+
+      // 确保至少有一个查询条件
+      if (!queryParams.catalog && !queryParams.dialogId) {
+        console.log('没有可用的查询条件，返回空列表');
+        return [];
+      }
+
+      console.log('查询对话列表参数:', queryParams);
+      const { data } = await chatService.listConversation(queryParams);
+
+      if (data && data.code === 0) {
+        console.log(`获取到${data.data?.length || 0}条对话`);
+
+        if (data.data && data.data.length > 0) {
           handleClickConversation(data.data[0].id, '');
         } else {
           handleClickConversation('', '');
         }
+      } else {
+        console.error('查询对话列表失败:', data);
       }
-      return data?.data;
+
+      return data?.data || [];
     },
   });
 

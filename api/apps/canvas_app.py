@@ -43,22 +43,40 @@ def canvas_list():
     try:
         # 尝试从请求中获取查询参数
         query_params = request.json or {}  # 如果request.json为None，使用空字典
+        
+        # 也支持从URL参数中获取查询条件（适用于GET请求）
+        url_params = request.args.to_dict() if request.args else {}
+        
+        # 合并JSON和URL参数，URL参数优先级更高
+        params = {**query_params, **url_params}
+        
         filters = {}
         
         # 构建过滤条件
-        if query_params and 'catalog' in query_params:
-            filters['catalog'] = query_params['catalog']
-        if query_params and 'is_virtual' in query_params:
-            filters['is_virtual'] = query_params['is_virtual']
-        if query_params and 'id' in query_params:
-            filters['id'] = query_params['id']
+        if params and 'catalog' in params:
+            filters['catalog'] = params['catalog']
+        if params and 'is_virtual' in params:
+            # 确保布尔值类型正确转换
+            is_virtual_value = params['is_virtual']
+            if isinstance(is_virtual_value, str):
+                if is_virtual_value.lower() == 'true':
+                    is_virtual_value = True
+                elif is_virtual_value.lower() == 'false':
+                    is_virtual_value = False
+                elif is_virtual_value.isdigit():
+                    is_virtual_value = bool(int(is_virtual_value))
+            filters['is_virtual'] = is_virtual_value
+        if params and 'id' in params:
+            filters['id'] = params['id']
+        
+        logging.info(f"Canvas列表查询条件: user_id={current_user.id}, filters={filters}")
         
         # 查询数据库
         canvas_list = UserCanvasService.query(user_id=current_user.id, **filters)
         
         # 确保查询结果存在
         if not canvas_list:
-            logging.warning(f"未找到满足条件的助理: user_id={current_user.id}, filters={filters}")
+            logging.warning(f"未找到满足条件的记录: user_id={current_user.id}, filters={filters}")
             return get_json_result(data=[])
         
         # 转换为字典列表并排序
@@ -80,7 +98,7 @@ def canvas_list():
         return get_json_result(data=result)
     except Exception as e:
         logging.exception(f"canvas_list接口异常: {e}")
-        return get_json_result(data=[], message=f"获取助理列表失败: {str(e)}")
+        return get_json_result(data=[], message=f"获取列表失败: {str(e)}")
 
 
 @manager.route('/rm', methods=['POST'])  # noqa: F821
@@ -102,27 +120,63 @@ def rm():
 def save():
     req = request.json
     req["user_id"] = current_user.id
+    
+    # 确保dsl字段格式正确
     if not isinstance(req["dsl"], str):
         req["dsl"] = json.dumps(req["dsl"], ensure_ascii=False)
     req["dsl"] = json.loads(req["dsl"])
+    
+    # 生成catalog值的函数（如果没有提供）
+    def generate_catalog():
+        return ''.join(random.choice("123456789abcdefghijklmnopqrstuvwxyz") for i in range(16))
+    
+    # 如果是新记录且没有catalog，则生成一个
     if "id" not in req:
+        # 检查title是否已存在
         if UserCanvasService.query(user_id=current_user.id, title=req["title"].strip()):
             return get_data_error_result(message=f"{req['title'].strip()} already exists.")
+        
         req["id"] = get_uuid()
+        
+        # 如果没有提供catalog，生成一个新的
+        if "catalog" not in req or not req["catalog"]:
+            req["catalog"] = generate_catalog()
+            logging.info(f"为新Canvas生成catalog: {req['catalog']}")
+        
+        logging.info(f"创建新Canvas: id={req['id']}, title={req['title']}, catalog={req.get('catalog', '未设置')}")
         if not UserCanvasService.save(**req):
             return get_data_error_result(message="Fail to save canvas.")
     else:
+        # 更新现有记录
         if not UserCanvasService.query(user_id=current_user.id, id=req["id"]):
             return get_json_result(
                 data=False, message='Only owner of canvas authorized for this operation.',
                 code=RetCode.OPERATING_ERROR)
+        
+        # 获取现有记录，确保catalog被保留
+        e, existing_canvas = UserCanvasService.get_by_id(req["id"])
+        if e and existing_canvas and existing_canvas.catalog:
+            # 保留原有的catalog值
+            if "catalog" not in req or not req["catalog"]:
+                req["catalog"] = existing_canvas.catalog
+                logging.info(f"保持现有canvas的catalog: id={req['id']}, catalog={req['catalog']}")
+        elif "catalog" not in req or not req["catalog"]:
+            # 如果现有记录没有catalog，生成一个
+            req["catalog"] = generate_catalog()
+            logging.info(f"为现有canvas生成新catalog: id={req['id']}, catalog={req['catalog']}")
+        
+        logging.info(f"更新Canvas: id={req['id']}, catalog={req.get('catalog', '未设置')}")
         UserCanvasService.update_by_id(req["id"], req)
-    # save version    
-    UserCanvasVersionService.insert( user_canvas_id=req["id"], dsl=req["dsl"], title="{0}_{1}".format(req["title"], time.strftime("%Y_%m_%d_%H_%M_%S")))
+    
+    # 保存版本信息
+    UserCanvasVersionService.insert(
+        user_canvas_id=req["id"], 
+        dsl=req["dsl"], 
+        title="{0}_{1}".format(req["title"], time.strftime("%Y_%m_%d_%H_%M_%S"))
+    )
     UserCanvasVersionService.delete_all_versions(req["id"])
+    
     return get_json_result(data=req)
-
- 
 
 
 @manager.route('/get/<canvas_id>', methods=['GET'])  # noqa: F821
@@ -426,52 +480,62 @@ def get_new_catalog():
     
     return get_json_result(''.join(random.choice("123456789abcdefghijklmnopqrstuvwxyz") for i in range(16)))
 
-'''
-@manager.route('/get_conversation', methods=['POST'])  # noqa: F821
-@validate_request("id")
+@manager.route('/conversation/list', methods=['GET'])  # noqa: F821
 @login_required
-def get_conversation():
-    req = request.json
-    conversation_id = req["id"]
-
-    # 查询对话记录
-    success, conversation = ConversationService.get_by_id(conversation_id)
-    if not success or conversation is None:
-        return get_json_result(data=False, message='Conversation not found.', code=RetCode.NOT_FOUND)
-
-    conversation_data = conversation.to_dict()
-    return get_json_result(data=conversation_data)
-
-@manager.route('/create_conversation', methods=['POST'])  # noqa: F821
-@validate_request("content")
-@login_required
-def create_conversation():
-    req = request.json
-    content = req["content"]
-
-    # 创建对话记录
-    conversation = CommonService.save(content)
-    return get_json_result(data=conversation.to_dict())
-
-
-@manager.route('/update_conversation', methods=['POST'])  # noqa: F821
-@validate_request("id", "content")
-@login_required
-def update_conversation():
-    class ConversationService(CommonService):
-        model = Conversation
-    req = request.json
-
-    # 更新对话记录
-    updated_count = ConversationService.filter_update({"id": req["id"]}, {"content": req["content"]})
-    if updated_count == 0:
-        return get_json_result(data=False, message='Conversation not found.', code=RetCode.NOT_FOUND)
-
-    # 返回更新的对话记录
-    success, conversation = ConversationService.get_by_id(req["id"])
-    if not success or conversation is None:
-        return get_json_result(data=False, message='Conversation not found.', code=RetCode.NOT_FOUND)
-
-    conversation_data = conversation.to_dict()
-    return get_json_result(data=conversation_data)
-'''
+def conversation_list():
+    try:
+        # 尝试从请求中获取查询参数
+        query_params = request.json or {}  # 如果request.json为None，使用空字典
+        
+        # 也支持从URL参数中获取查询条件（适用于GET请求）
+        url_params = request.args.to_dict() if request.args else {}
+        
+        # 合并JSON和URL参数，URL参数优先级更高
+        params = {**query_params, **url_params}
+        
+        filters = {}
+        
+        # 添加固定条件：is_virtual=False，以只查询对话（非助理）
+        filters['is_virtual'] = False
+        
+        # 构建过滤条件
+        if params and 'catalog' in params:
+            filters['catalog'] = params['catalog']
+            logging.info(f"对话列表按catalog过滤: {params['catalog']}")
+        if params and 'dialog_id' in params:
+            filters['dialog_id'] = params['dialog_id']
+        if params and 'dialogId' in params:
+            filters['dialog_id'] = params['dialogId']  # 兼容旧版前端参数名
+        if params and 'id' in params:
+            filters['id'] = params['id']
+        
+        logging.info(f"对话列表查询条件: user_id={current_user.id}, filters={filters}")
+        
+        # 查询数据库
+        canvas_list = UserCanvasService.query(user_id=current_user.id, **filters)
+        
+        # 确保查询结果存在
+        if not canvas_list:
+            logging.warning(f"未找到满足条件的对话: user_id={current_user.id}, filters={filters}")
+            return get_json_result(data=[])
+        
+        # 转换为字典列表并排序
+        result = []
+        for c in canvas_list:
+            try:
+                # 确保每个canvas对象可以正确转换为字典
+                canvas_dict = c.to_dict()
+                result.append(canvas_dict)
+            except Exception as e:
+                logging.error(f"canvas对象转换为字典时出错: {e}")
+                # 跳过出错的对象，继续处理其他对象
+                continue
+        
+        # 按更新时间倒序排序
+        if result:
+            result = sorted(result, key=lambda x: x.get("update_time", 0) * -1)
+        
+        return get_json_result(data=result)
+    except Exception as e:
+        logging.exception(f"conversation_list接口异常: {e}")
+        return get_json_result(data=[], message=f"获取对话列表失败: {str(e)}")
