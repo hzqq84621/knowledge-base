@@ -243,12 +243,18 @@ const AgentChat = () => {
     }
 
     try {
+      console.log(
+        `创建新对话，使用Agent ID: ${activeAgentId}, catalog: ${activeCatalog}`,
+      );
+
       const result = await createConversation(
         activeAgentId,
         `新对话 ${conversationList.length + 1}`,
+        activeCatalog || undefined, // 传递当前活动catalog，确保新对话与当前Agent关联
       );
 
       if (result) {
+        console.log('成功创建新对话:', result);
         // 创建成功后会自动刷新对话列表，不需要手动添加
         // 选中新创建的会话
         setActiveConversationId(result.id || result.conversation_id);
@@ -257,7 +263,13 @@ const AgentChat = () => {
       console.error('创建新对话失败:', error);
       message.error(t('createConversationFailed'));
     }
-  }, [activeAgentId, conversationList.length, createConversation, t]);
+  }, [
+    activeAgentId,
+    activeCatalog,
+    conversationList.length,
+    createConversation,
+    t,
+  ]);
 
   /**
    * 处理对话删除操作

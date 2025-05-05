@@ -177,11 +177,12 @@ export const useFetchConversationList = (catalog?: string) => {
     queryKey: ['fetchConversationList', catalog],
     queryFn: async () => {
       try {
-        // 构建查询参数，与获取Agent列表逻辑类似
+        // 构建查询参数
         const params: any = {
           page: 1,
           page_size: 100,
           keywords: '',
+          is_virtual: false, // 明确指定只查询is_virtual=false的对话，不包含助理
         };
 
         // 如果有catalog参数，添加到查询条件中
@@ -190,6 +191,25 @@ export const useFetchConversationList = (catalog?: string) => {
           console.log(`使用catalog参数过滤对话列表: ${catalog}`);
         }
 
+        // 尝试使用自定义接口获取对话列表
+        try {
+          const { data } = await request.get('/v1/canvas/conversation/list', {
+            params,
+          });
+
+          console.log('尝试使用专用conversation接口获取对话列表:', data);
+
+          if (data?.code === 0 && data?.data) {
+            return data.data;
+          }
+        } catch (error) {
+          console.warn(
+            '专用conversation接口不可用，将使用通用canvas/list接口:',
+            error,
+          );
+        }
+
+        // 如果专用接口失败，使用通用接口并筛选
         const { data } = await flowService.listCanvas(params);
 
         console.log('获取对话列表API响应数据:', data);
@@ -862,6 +882,8 @@ export const useDeleteAgent = () => {
 // 创建新对话
 export const useCreateConversation = () => {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
   const { isPending: loading, mutateAsync } = useMutation({
     mutationKey: ['createConversation'],
     mutationFn: async ({
@@ -874,91 +896,80 @@ export const useCreateConversation = () => {
       catalog?: string;
     }) => {
       try {
-        console.log('开始创建对话，获取Agent信息...');
-        console.log('Agent ID:', agentId);
-
-        // 直接使用API调用获取Agent信息，避免使用可能有问题的flowService.getCanvas
-        const response = await request.get(`/v1/canvas/get/${agentId}`);
-        const agentData = response.data;
-
-        console.log('获取到的Agent数据:', agentData);
-
-        if (agentData.code !== 0 || !agentData.data) {
-          console.error('获取Agent信息失败:', agentData);
-          message.error('获取Agent信息失败');
-          return null;
-        }
-
-        // 使用Agent的catalog值
-        const agentCatalog = catalog || agentData.data.catalog;
-
-        if (!agentCatalog) {
-          console.error('Agent没有catalog值:', agentData.data);
-          message.error('无效的Agent配置');
-          return null;
-        }
-
-        // 生成带有时间戳的标题以确保唯一性
-        const timestamp = new Date().getTime();
-        const uniqueTitle = title
-          ? `${title}_${timestamp.toString().slice(-6)}`
-          : `新对话_${timestamp.toString().slice(-6)}`;
-
-        // 用户可见的显示名称 (不带时间戳)
-        const displayTitle = title || '新对话';
-
         console.log(
-          `创建对话: 唯一标题=${uniqueTitle}, 显示标题=${displayTitle}, catalog=${agentCatalog}`,
+          `开始创建新对话，使用Agent: ${agentId}, catalog: ${catalog}`,
         );
 
-        // 使用setCanvas API创建对话
-        const setData = await flowService.setCanvas({
-          title: uniqueTitle, // 使用唯一标题作为内部ID
-          display_title: displayTitle, // 添加显示标题字段用于显示
-          description: `与${agentData.data.title || 'Agent'}的对话`,
-          dsl: agentData.data.dsl, // 使用相同的DSL
-          is_virtual: false, // 标记为对话而非助理
-          catalog: agentCatalog, // 使用相同的catalog值
-          avatar: agentData.data.avatar, // 使用相同的头像
-        });
-
-        console.log('创建对话API返回:', setData);
-
-        if (setData.data && setData.data.code === 0) {
-          message.success(i18n.t('message.created'));
-
-          // 刷新对话列表
-          queryClient.invalidateQueries({
-            queryKey: ['fetchConversationList', agentCatalog],
-          });
-
-          return {
-            ...setData.data.data,
-            conversation_id: setData.data.data.id, // 保持与原API返回结构兼容
-            agentId: agentId, // 保存关联的agentId
-            title: displayTitle, // 返回用户可读的标题
-          };
+        // 如果没有传入catalog参数，先获取源Agent的catalog
+        let agentCatalog = catalog;
+        if (!agentCatalog) {
+          try {
+            console.log('正在获取源Agent的catalog值...');
+            const agentResponse = await request.get(
+              `/v1/canvas/get/${agentId}`,
+            );
+            if (
+              agentResponse.data?.code === 0 &&
+              agentResponse.data.data?.catalog
+            ) {
+              agentCatalog = agentResponse.data.data.catalog;
+              console.log(`成功获取源Agent的catalog: ${agentCatalog}`);
+            }
+          } catch (error) {
+            console.error('获取源Agent信息失败:', error);
+          }
         }
 
-        console.error('创建对话失败:', setData);
-        message.error(setData.data?.message || '创建对话失败');
-        return null;
+        // 使用克隆canvas API创建新对话
+        const { data } = await flowService.cloneCanvas({
+          canvas_id: agentId,
+          new_title: title || `新对话 ${new Date().getTime()}`,
+          is_virtual: false, // 明确指定为对话类型，不是虚拟助理
+          preserve_catalog: true, // 保留源Agent的catalog值，确保新对话在相同分组
+        });
+
+        console.log('克隆API响应:', data);
+
+        if (data.code === 0 && data.data) {
+          console.log('成功创建新对话:', data.data);
+
+          // 更新所有相关的对话列表缓存
+          // 1. 更新无catalog筛选的列表
+          queryClient.invalidateQueries({
+            queryKey: ['fetchConversationList'],
+          });
+
+          // 2. 如果有catalog，更新特定catalog的列表
+          if (agentCatalog) {
+            console.log(`更新catalog=${agentCatalog}的对话列表`);
+            queryClient.invalidateQueries({
+              queryKey: ['fetchConversationList', agentCatalog],
+            });
+          }
+
+          message.success(t('message.created'));
+          return data.data; // 返回新创建的对话数据
+        } else {
+          console.error('创建对话API返回错误:', data);
+          message.error(data?.message || t('message.createFailed'));
+          return null;
+        }
       } catch (error) {
-        console.error('创建对话过程中发生错误:', error);
-        message.error('创建对话失败');
+        console.error('创建对话时发生错误:', error);
+        message.error(t('message.createFailed'));
         return null;
       }
     },
   });
 
   const createConversation = useCallback(
-    async (agentId: string, title?: string) => {
+    async (agentId: string, title?: string, catalog?: string) => {
       if (!agentId) {
         message.warning('请先选择一个Agent');
         return null;
       }
 
-      return await mutateAsync({ agentId, title });
+      return await mutateAsync({ agentId, title, catalog });
     },
     [mutateAsync],
   );

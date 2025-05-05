@@ -18,6 +18,8 @@ const {
   debug,
   listCanvasTeam,
   settingCanvas,
+  completion,
+  cloneCanvas, // 添加cloneCanvas API
 } = api;
 
 const methods = {
@@ -84,6 +86,16 @@ const methods = {
   },
   settingCanvas: {
     url: settingCanvas,
+    method: 'post',
+  },
+  // 添加completion方法
+  completion: {
+    url: completion || '/v1/canvas/completion',
+    method: 'post',
+  },
+  // 添加cloneCanvas方法
+  cloneCanvas: {
+    url: cloneCanvas,
     method: 'post',
   },
 } as const;

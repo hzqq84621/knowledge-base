@@ -126,6 +126,12 @@ def save():
         req["dsl"] = json.dumps(req["dsl"], ensure_ascii=False)
     req["dsl"] = json.loads(req["dsl"])
     
+    # 删除不属于Canvas模型的字段，避免数据库保存时出错
+    if "nickname" in req:
+        del req["nickname"]
+    if "tenant_avatar" in req:
+        del req["tenant_avatar"]
+    
     # 生成catalog值的函数（如果没有提供）
     def generate_catalog():
         return ''.join(random.choice("123456789abcdefghijklmnopqrstuvwxyz") for i in range(16))
@@ -539,3 +545,219 @@ def conversation_list():
     except Exception as e:
         logging.exception(f"conversation_list接口异常: {e}")
         return get_json_result(data=[], message=f"获取对话列表失败: {str(e)}")
+
+@manager.route('/clone', methods=['POST'])  # noqa: F821
+@validate_request("canvas_id")
+@login_required
+def clone():
+    """克隆Canvas功能
+    请求参数:
+    - canvas_id: 要克隆的Canvas ID
+    - new_title: (可选) 新Canvas的标题，如果不提供则自动生成"原标题_clone"
+    - is_virtual: (可选) 是否为虚拟助理，默认False表示对话
+    - catalog: (可选) 目录ID，如果提供则使用该catalog，否则生成新catalog
+    - preserve_catalog: (可选) 是否保留源对象的catalog，优先级高于catalog参数
+    - keep_history: (可选) 是否保留聊天历史，默认False表示新对话不保留历史
+    
+    返回:
+    - 新创建的Canvas详情
+    """
+    try:
+        req = request.json
+        source_id = req["canvas_id"]
+        
+        # 获取源Canvas
+        e, source_canvas = UserCanvasService.get_by_id(source_id)
+        if not e:
+            return get_data_error_result(message="Source canvas not found.")
+        
+        # 检查用户权限（用户必须对源Canvas有访问权限）
+        has_permission = False
+        # 检查是否是所有者
+        if source_canvas.user_id == current_user.id:
+            has_permission = True
+        # 不是所有者，检查是否有权限记录
+        else:
+            permissions = UserCanvasPermission.query(user_id=current_user.id, canvas_id=source_id)
+            if permissions:
+                has_permission = True
+                
+        if not has_permission:
+            return get_json_result(
+                data=False, 
+                message='No permission to access the source canvas.',
+                code=RetCode.OPERATING_ERROR)
+        
+        # 准备新Canvas数据
+        source_data = source_canvas.to_dict()
+        
+        # 删除不属于Canvas模型的字段，避免数据库保存时出错
+        if "nickname" in source_data:
+            del source_data["nickname"]
+        if "tenant_avatar" in source_data:
+            del source_data["tenant_avatar"]
+        
+        # 生成新ID
+        new_id = get_uuid()
+        
+        # 确定catalog值：1.如果preserve_catalog为True，使用源对象的catalog；2.如果提供catalog，使用提供的值；3.否则生成新catalog
+        if req.get("preserve_catalog") and source_data.get("catalog"):
+            new_catalog = source_data.get("catalog")
+            logging.info(f"保留源对象catalog: {new_catalog}")
+        elif req.get("catalog"):
+            new_catalog = req.get("catalog")
+            logging.info(f"使用提供的catalog: {new_catalog}")
+        else:
+            new_catalog = ''.join(random.choice("123456789abcdefghijklmnopqrstuvwxyz") for i in range(16))
+            logging.info(f"生成新catalog: {new_catalog}")
+        
+        # 设置新标题
+        if "new_title" in req and req["new_title"].strip():
+            new_title = req["new_title"].strip()
+        else:
+            new_title = f"{source_data['title']}_clone"
+            
+            # 确保标题不重复
+            counter = 1
+            while UserCanvasService.query(user_id=current_user.id, title=new_title):
+                new_title = f"{source_data['title']}_clone_{counter}"
+                counter += 1
+        
+        # 明确处理is_virtual参数
+        # 默认为False（对话），除非明确指定为True
+        is_virtual = False
+        if "is_virtual" in req:
+            # 确保布尔值类型正确转换
+            is_virtual_value = req["is_virtual"]
+            if isinstance(is_virtual_value, str):
+                if is_virtual_value.lower() == 'true':
+                    is_virtual = True
+                elif is_virtual_value.lower() == 'false':
+                    is_virtual = False
+                elif is_virtual_value.isdigit():
+                    is_virtual = bool(int(is_virtual_value))
+            else:
+                is_virtual = bool(is_virtual_value)
+        
+        logging.info(f"设置is_virtual={is_virtual}（{'虚拟助理' if is_virtual else '对话'}）")
+        
+        # 深拷贝源对象的DSL，确保不会共享引用
+        dsl_copy = None
+        if source_data.get("dsl"):
+            try:
+                if isinstance(source_data["dsl"], str):
+                    dsl_copy = json.loads(source_data["dsl"])
+                else:
+                    dsl_copy = json.loads(json.dumps(source_data["dsl"]))
+                
+                # 如果是对话（非虚拟助理），且不保留历史，则重置聊天历史
+                if not is_virtual and not req.get("keep_history", False):
+                    # 清空历史消息和路径
+                    logging.info("创建新对话，清空聊天历史但保留系统初始化消息")
+                    
+                    # 查找Begin节点的prologue内容和第一次交互
+                    begin_prologue = None
+                    first_message = None
+                    system_message = None
+                    
+                    # 查找begin节点
+                    if "components" in dsl_copy:
+                        for component_id, component in dsl_copy["components"].items():
+                            if component_id.startswith("begin") and "obj" in component and "params" in component["obj"]:
+                                if "prologue" in component["obj"]["params"]:
+                                    begin_prologue = component["obj"]["params"]["prologue"]
+                                    logging.info(f"找到begin节点的prologue: {begin_prologue}")
+                                    break
+                    
+                    # 保存系统消息或助手的欢迎消息
+                    if "messages" in dsl_copy and dsl_copy["messages"]:
+                        for msg in dsl_copy["messages"]:
+                            # 保留系统角色消息
+                            if msg.get("role") == "system":
+                                system_message = msg
+                                logging.info(f"找到系统消息: {system_message}")
+                                break
+                            # 或保留助手的第一条消息(通常是欢迎语)
+                            elif msg.get("role") == "assistant" and not first_message:
+                                first_message = msg
+                                logging.info(f"找到助手首条消息: {first_message}")
+                    
+                    # 重置消息历史，但保留系统消息或欢迎消息
+                    new_messages = []
+                    if system_message:
+                        new_messages.append(system_message)
+                    elif first_message:
+                        new_messages.append(first_message)
+                    elif begin_prologue:
+                        # 如果没有系统消息但有prologue，创建一个新的欢迎消息
+                        welcome_msg = {
+                            "role": "assistant",
+                            "content": begin_prologue,
+                            "id": get_uuid()
+                        }
+                        new_messages.append(welcome_msg)
+                        logging.info(f"创建新的欢迎消息: {welcome_msg}")
+                    
+                    # 更新DSL
+                    dsl_copy["messages"] = new_messages
+                    dsl_copy["history"] = []  # 清空历史
+                    
+                    # 只保留初始路径，通常是第一步
+                    if "path" in dsl_copy:
+                        if dsl_copy["path"] and len(dsl_copy["path"]) > 0:
+                            dsl_copy["path"] = [dsl_copy["path"][0]] if dsl_copy["path"] else []
+                        else:
+                            dsl_copy["path"] = []
+                    
+                    # 清空引用
+                    if "reference" in dsl_copy:
+                        dsl_copy["reference"] = []
+                    
+                    # 处理组件状态，重置输出但保留系统初始状态
+                    if "components" in dsl_copy:
+                        for component_id, component in dsl_copy["components"].items():
+                            # 保留begin节点的初始配置
+                            if component_id.startswith("begin"):
+                                continue
+                                
+                            # 其他组件重置状态
+                            if "obj" in component:
+                                if "output" in component["obj"]:
+                                    component["obj"]["output"] = None
+                                if "inputs" in component["obj"]:
+                                    component["obj"]["inputs"] = []
+                                # 清除debug_inputs
+                                if "params" in component["obj"] and "debug_inputs" in component["obj"]["params"]:
+                                    component["obj"]["params"]["debug_inputs"] = []
+            except Exception as e:
+                logging.error(f"处理DSL时出错: {e}")
+                # 如果处理出错，使用原始DSL
+                dsl_copy = source_data["dsl"]
+                logging.error(f"回退到原始DSL")
+        else:
+            dsl_copy = source_data.get("dsl")
+        
+        # 创建新Canvas记录
+        new_canvas = {
+            "id": new_id,
+            "user_id": current_user.id,
+            "title": new_title,
+            "catalog": new_catalog,
+            "dsl": dsl_copy,
+            "description": source_data.get("description", ""),
+            "avatar": source_data.get("avatar", ""),
+            "permission": source_data.get("permission", "private"),
+            "is_virtual": is_virtual  # 使用处理后的is_virtual值
+        }
+        
+        # 保存新Canvas
+        if not UserCanvasService.save(**new_canvas):
+            return get_data_error_result(message="Failed to clone canvas.")
+            
+        logging.info(f"Canvas克隆成功: 源ID={source_id}, 新ID={new_id}, 标题={new_title}")
+        
+        # 返回新创建的Canvas
+        return get_json_result(data=new_canvas)
+    except Exception as e:
+        logging.exception(f"clone接口异常: {e}")
+        return server_error_response(e)
