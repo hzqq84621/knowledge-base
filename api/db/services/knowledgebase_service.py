@@ -160,20 +160,26 @@ class KnowledgebaseService(CommonService):
             User.avatar.alias('tenant_avatar'),
             cls.model.update_time
         ]
+        
+        # 权限查询逻辑:
+        # 1. 用户可以看到自己创建的所有知识库
+        # 2. 用户可以看到同一租户下其他用户创建的、权限为team的知识库
+        permission_condition = (
+            (cls.model.created_by == user_id) |  # 用户自己创建的
+            ((cls.model.tenant_id.in_(joined_tenant_ids)) &  # 同一租户下的
+             (cls.model.permission == TenantPermission.TEAM.value))  # 且权限为team的
+        )
+        
         if keywords:
             kbs = cls.model.select(*fields).join(User, on=(cls.model.tenant_id == User.id)).where(
-                ((cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission ==
-                                                                TenantPermission.TEAM.value)) | (
-                    cls.model.tenant_id == user_id))
-                & (cls.model.status == StatusEnum.VALID.value),
+                permission_condition & 
+                (cls.model.status == StatusEnum.VALID.value) &
                 (fn.LOWER(cls.model.name).contains(keywords.lower()))
             )
         else:
             kbs = cls.model.select(*fields).join(User, on=(cls.model.tenant_id == User.id)).where(
-                ((cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission ==
-                                                                TenantPermission.TEAM.value)) | (
-                    cls.model.tenant_id == user_id))
-                & (cls.model.status == StatusEnum.VALID.value)
+                permission_condition &
+                (cls.model.status == StatusEnum.VALID.value)
             )
         if parser_id:
             kbs = kbs.where(cls.model.parser_id == parser_id)
@@ -325,12 +331,20 @@ class KnowledgebaseService(CommonService):
             kbs = kbs.where(cls.model.id == id)
         if name:
             kbs = kbs.where(cls.model.name == name)
-        kbs = kbs.where(
-            ((cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission ==
-                                                            TenantPermission.TEAM.value)) | (
-                cls.model.tenant_id == user_id))
-            & (cls.model.status == StatusEnum.VALID.value)
+            
+        # 权限查询逻辑:
+        # 1. 用户可以看到自己创建的所有知识库
+        # 2. 用户可以看到同一租户下其他用户创建的、权限为team的知识库
+        permission_condition = (
+            (cls.model.created_by == user_id) |  # 用户自己创建的
+            ((cls.model.tenant_id.in_(joined_tenant_ids)) &  # 同一租户下的
+             (cls.model.permission == TenantPermission.TEAM.value))  # 且权限为team的
         )
+        
+        kbs = kbs.where(
+            permission_condition & (cls.model.status == StatusEnum.VALID.value)
+        )
+        
         if desc:
             kbs = kbs.order_by(cls.model.getter_by(orderby).desc())
         else:
@@ -343,19 +357,53 @@ class KnowledgebaseService(CommonService):
     @classmethod
     @DB.connection_context()
     def accessible(cls, kb_id, user_id):
-        # Check if a knowledge base is accessible by a user
-        # Args:
-        #     kb_id: Knowledge base ID
-        #     user_id: User ID
-        # Returns:
-        #     Boolean indicating accessibility
-        docs = cls.model.select(
-            cls.model.id).join(UserTenant, on=(UserTenant.tenant_id == Knowledgebase.tenant_id)
-                               ).where(cls.model.id == kb_id, UserTenant.user_id == user_id).paginate(0, 1)
-        docs = docs.dicts()
-        if not docs:
+        """Check if a knowledge base is accessible by a user.
+        
+        This method verifies whether a user has permission to access a knowledge base
+        by checking the knowledge base's permission setting and the user's relation to it.
+        
+        Access rules:
+        1. If the user is the creator of the knowledge base, they have access regardless of permission setting
+        2. If the permission is set to "team" and the user is in the same tenant, they have access
+        3. If the permission is set to "me", only the creator has access
+        
+        Args:
+            kb_id: Knowledge base ID
+            user_id: User ID
+        Returns:
+            Boolean indicating accessibility
+        """
+        # 获取知识库信息
+        kb_info = cls.model.select(
+            cls.model.id, 
+            cls.model.permission,
+            cls.model.created_by,
+            cls.model.tenant_id
+        ).where(cls.model.id == kb_id).first()
+        
+        if not kb_info:
             return False
-        return True
+            
+        # 如果用户是创建者，总是有权限访问
+        if kb_info.created_by == user_id:
+            return True
+            
+        # 如果权限是"me"，只有创建者能访问，其他人不能
+        if kb_info.permission == TenantPermission.ME.value:
+            return False
+            
+        # 如果权限是"team"，检查用户是否在同一租户中
+        if kb_info.permission == TenantPermission.TEAM.value:
+            # 查询用户是否属于该租户
+            tenant_membership = UserTenant.select().where(
+                (UserTenant.tenant_id == kb_info.tenant_id) &
+                (UserTenant.user_id == user_id) &
+                (UserTenant.status == StatusEnum.VALID.value)
+            ).first()
+            
+            return tenant_membership is not None
+            
+        return False
 
     @classmethod
     @DB.connection_context()

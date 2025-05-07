@@ -2,19 +2,25 @@
 import { DocumentParserType } from '@/constants/knowledge';
 import { useTranslate } from '@/hooks/common-hooks';
 import { normFile } from '@/utils/file-util';
-import { PlusOutlined, CaretRightOutlined, UserOutlined, TeamOutlined } from '@ant-design/icons';
-import { Button, Form, Input, Space, Upload, Select, Collapse, Tag } from 'antd';
+import { CaretRightOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  Button,
+  Collapse,
+  Form,
+  Input,
+  Radio,
+  Select,
+  Space,
+  Upload,
+} from 'antd';
 import { FormInstance } from 'antd/lib';
 import { useEffect, useMemo, useState } from 'react';
 
 // 导入自定义 hooks
 import {
-  useFetchKnowledgeConfigurationOnMount,  // 用于加载知识库配置
-  useSubmitKnowledgeConfiguration,         // 用于提交知识库配置
+  useFetchKnowledgeConfigurationOnMount, // 用于加载知识库配置
+  useSubmitKnowledgeConfiguration, // 用于提交知识库配置
 } from '../hooks';
-
-// 导入权限管理组件
-import PermissionManagement from './permission-management';
 
 // 导入各种文档类型的配置组件
 import { AudioConfiguration } from './audio';
@@ -37,20 +43,20 @@ import styles from '../index.less';
 
 // 文档解析器类型到对应配置组件的映射
 const ConfigurationComponentMap = {
-  [DocumentParserType.Naive]: NaiveConfiguration,        // 简单文档配置
-  [DocumentParserType.Qa]: QAConfiguration,              // 问答文档配置
-  [DocumentParserType.Resume]: ResumeConfiguration,      // 简历文档配置
-  [DocumentParserType.Manual]: ManualConfiguration,      // 手册文档配置
-  [DocumentParserType.Table]: TableConfiguration,        // 表格文档配置
-  [DocumentParserType.Paper]: PaperConfiguration,        // 论文文档配置
-  [DocumentParserType.Book]: BookConfiguration,          // 书籍文档配置
-  [DocumentParserType.Laws]: LawsConfiguration,          // 法律文档配置
+  [DocumentParserType.Naive]: NaiveConfiguration, // 简单文档配置
+  [DocumentParserType.Qa]: QAConfiguration, // 问答文档配置
+  [DocumentParserType.Resume]: ResumeConfiguration, // 简历文档配置
+  [DocumentParserType.Manual]: ManualConfiguration, // 手册文档配置
+  [DocumentParserType.Table]: TableConfiguration, // 表格文档配置
+  [DocumentParserType.Paper]: PaperConfiguration, // 论文文档配置
+  [DocumentParserType.Book]: BookConfiguration, // 书籍文档配置
+  [DocumentParserType.Laws]: LawsConfiguration, // 法律文档配置
   [DocumentParserType.Presentation]: PresentationConfiguration, // 演示文档配置
-  [DocumentParserType.Picture]: PictureConfiguration,    // 图片文档配置
-  [DocumentParserType.One]: OneConfiguration,            // 单一文档配置
-  [DocumentParserType.Audio]: AudioConfiguration,        // 音频文档配置
-  [DocumentParserType.Email]: EmailConfiguration,        // 邮件文档配置
-  [DocumentParserType.Tag]: TagConfiguration,            // 标签文档配置
+  [DocumentParserType.Picture]: PictureConfiguration, // 图片文档配置
+  [DocumentParserType.One]: OneConfiguration, // 单一文档配置
+  [DocumentParserType.Audio]: AudioConfiguration, // 音频文档配置
+  [DocumentParserType.Email]: EmailConfiguration, // 邮件文档配置
+  [DocumentParserType.Tag]: TagConfiguration, // 标签文档配置
   [DocumentParserType.KnowledgeGraph]: KnowledgeGraphConfiguration, // 知识图谱文档配置
 };
 
@@ -71,22 +77,21 @@ export const ConfigurationForm = ({ form }: { form: FormInstance }) => {
   const [finalParserId, setFinalParserId] = useState<DocumentParserType>();
   // 折叠面板状态
   const [expandAdvanced, setExpandAdvanced] = useState(false);
-  const [expandPermissions, setExpandPermissions] = useState(false);
-  // 权限状态
-  const [permissionType, setPermissionType] = useState<'me' | 'team'>('me');
   // 加载知识库详情
   const knowledgeDetails = useFetchKnowledgeConfigurationOnMount(form);
   // 监听解析器ID的变化
   const parserId: DocumentParserType = Form.useWatch('parser_id', form);
-  // 监听协作者变化
-  const collaborators = Form.useWatch('collaborators', form);
-  
+  // 监听权限变化
+  const permission = Form.useWatch('permission', form);
+
   // 获取切片方法选项
   const chunkMethodOptions = useMemo(() => {
-    return Object.values(DocumentParserType).map(value => ({
-      label: value === DocumentParserType.KnowledgeGraph ? 'Knowledge Graph' : 
-             value.charAt(0).toUpperCase() + value.slice(1),
-      value: value
+    return Object.values(DocumentParserType).map((value) => ({
+      label:
+        value === DocumentParserType.KnowledgeGraph
+          ? 'Knowledge Graph'
+          : value.charAt(0).toUpperCase() + value.slice(1),
+      value: value,
     }));
   }, []);
 
@@ -106,31 +111,6 @@ export const ConfigurationForm = ({ form }: { form: FormInstance }) => {
   useEffect(() => {
     setFinalParserId(knowledgeDetails.parser_id as DocumentParserType);
   }, [knowledgeDetails.parser_id]);
-
-  // 当协作者列表变化时，判断权限类型
-  useEffect(() => {
-    if (Array.isArray(collaborators) && collaborators.length > 0) {
-      setPermissionType('team');
-    } else {
-      setPermissionType('me');
-    }
-  }, [collaborators]);
-
-  // 权限状态标签
-  const permissionTag = useMemo(() => {
-    if (permissionType === 'team') {
-      return (
-        <Tag color="blue" style={{ marginLeft: 8 }}>
-          <TeamOutlined /> {t('team')}
-        </Tag>
-      );
-    }
-    return (
-      <Tag color="default" style={{ marginLeft: 8 }}>
-        <UserOutlined /> {t('me')}
-      </Tag>
-    );
-  }, [permissionType, t]);
 
   return (
     <Form form={form} name="validateOnly" layout="vertical" autoComplete="off">
@@ -164,30 +144,24 @@ export const ConfigurationForm = ({ form }: { form: FormInstance }) => {
         <Input />
       </Form.Item>
 
-      {/* 权限管理组件 - 放入折叠面板，并显示当前状态 */}
-      <Collapse 
-        bordered={false} 
-        expandIcon={({ isActive }) => <CaretRightOutlined rotate={isActive ? 90 : 0} />}
-        onChange={(key) => setExpandPermissions(key.length > 0)}
-        style={{ marginBottom: 24 }}
+      {/* 权限设置 - 简化为单选按钮形式 */}
+      <Form.Item
+        name="permission"
+        label={t('permissions') || '权限'}
+        rules={[{ required: true }]}
       >
-        <Collapse.Panel 
-          header={
-            <span>
-              {t('permissions')}
-              {permissionTag}
-            </span>
-          } 
-          key="1"
-        >
-          <Form.Item name="collaborators">
-            <PermissionManagement />
-          </Form.Item>
-        </Collapse.Panel>
-      </Collapse>
+        <Radio.Group>
+          <Radio value="me">只有我</Radio>
+          <Radio value="team">团队</Radio>
+        </Radio.Group>
+      </Form.Item>
 
       {/* 切片方法选择 - 始终可见 */}
-      <Form.Item name="parser_id" label={t('chunkMethod')} rules={[{ required: true }]}>
+      <Form.Item
+        name="parser_id"
+        label={t('chunkMethod')}
+        rules={[{ required: true }]}
+      >
         <Select
           placeholder={t('chunkMethodPlaceholder')}
           options={chunkMethodOptions}
@@ -195,12 +169,14 @@ export const ConfigurationForm = ({ form }: { form: FormInstance }) => {
       </Form.Item>
 
       {/* 高级配置 - 默认折叠 */}
-      <Collapse 
-        bordered={false} 
-        expandIcon={({ isActive }) => <CaretRightOutlined rotate={isActive ? 90 : 0} />}
+      <Collapse
+        bordered={false}
+        expandIcon={({ isActive }) => (
+          <CaretRightOutlined rotate={isActive ? 90 : 0} />
+        )}
         onChange={(key) => setExpandAdvanced(key.length > 0)}
       >
-        <Collapse.Panel header={t('advancedSettings') || "参数配置"} key="1">
+        <Collapse.Panel header={t('advancedSettings') || '参数配置'} key="1">
           {/* 动态加载的文档类型特定配置 */}
           <ConfigurationComponent></ConfigurationComponent>
         </Collapse.Panel>
