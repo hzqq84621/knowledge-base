@@ -19,7 +19,7 @@ import traceback
 from flask import request, Response
 from flask_login import login_required, current_user
 from api.db.services.canvas_service import CanvasTemplateService, UserCanvasService
-from api.db.services.user_service import TenantService
+from api.db.services.user_service import TenantService,UserTenantService
 from api.db.services.user_canvas_version import UserCanvasVersionService
 from api.db.services.common_service import CommonService
 from api.settings import RetCode
@@ -49,9 +49,15 @@ def canvas_list():
     if 'id' in query_params:
         filters['id'] = query_params['id']
 
-    permitted_canvas_ids = UserCanvasService.get_permissions(current_user.id)
+    results = UserCanvasService.query(user_id=current_user.id, **filters)
 
-    results = [c for c in UserCanvasService.query(user_id=current_user.id, **filters) if c.id in permitted_canvas_ids]
+    user_tenants = UserTenantService.get_tenants_by_user_id(current_user.id)
+
+    me_canvases = [c for c in results if c.permission == 'me' and c.user_id == current_user.id]
+
+    team_canvases = [c for c in results if c.permission == 'team' and c.user_id in user_tenants]
+
+    results = me_canvases + team_canvases
 
     return get_json_result(data=sorted([c.to_dict() for c in results], key=lambda x: x["update_time"]*-1))
 
