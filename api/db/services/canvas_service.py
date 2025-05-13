@@ -62,7 +62,7 @@ class UserCanvasService(CommonService):
         
     @classmethod
     @DB.connection_context()
-    def update_permissions(cls, canvas_ids, user_ids, permission):
+    def update_permissions(cls, canvas_ids, user_ids, permission="read"):
         UserCanvasPermission.delete().where(UserCanvasPermission.user_canvas_id.in_(canvas_ids)).execute()
 
         permissions = []

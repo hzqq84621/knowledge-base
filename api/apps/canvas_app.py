@@ -71,25 +71,66 @@ def canvas_list():
         
         logging.info(f"Canvas列表查询条件: user_id={current_user.id}, filters={filters}")
         
-        # 查询数据库
-        canvas_list = UserCanvasService.query(user_id=current_user.id, **filters)
+        # 获取当前用户所属的租户
+        tenants = TenantService.get_joined_tenants_by_user_id(current_user.id)
+        tenant_ids = [m["tenant_id"] for m in tenants] if tenants else []
         
-        # 确保查询结果存在
-        if not canvas_list:
-            logging.warning(f"未找到满足条件的记录: user_id={current_user.id}, filters={filters}")
-            return get_json_result(data=[])
-        
-        # 转换为字典列表并排序
         result = []
-        for c in canvas_list:
+        
+        # 1. 查询用户自己创建的Canvas
+        my_canvas_list = UserCanvasService.query(user_id=current_user.id, **filters)
+        for c in my_canvas_list:
             try:
-                # 确保每个canvas对象可以正确转换为字典
                 canvas_dict = c.to_dict()
+                # 标记为自己创建的Canvas
+                canvas_dict["is_own"] = True
+                
+                # 添加用户自己的昵称 - 确保自己创建的Canvas也有nickname字段
+                canvas_dict["nickname"] = current_user.nickname
+                
                 result.append(canvas_dict)
             except Exception as e:
-                logging.error(f"canvas对象转换为字典时出错: {e}")
-                # 跳过出错的对象，继续处理其他对象
+                logging.error(f"Canvas对象转换为字典时出错: {e}")
                 continue
+        
+        # 2. 查询共享给当前用户的Canvas
+        # 根据tenant_ids查询同一租户内、权限为"team"且不是自己创建的Canvas
+        if tenant_ids:
+            from api.db.db_models import User, UserTenant
+            shared_canvas_list = UserCanvasService.model.select().join(
+                UserTenant, on=(UserCanvasService.model.user_id == UserTenant.user_id)
+            ).join(
+                User, on=(UserCanvasService.model.user_id == User.id)
+            ).where(
+                (UserCanvasService.model.permission == "team") &
+                (UserCanvasService.model.user_id != current_user.id) &
+                (UserTenant.tenant_id.in_(tenant_ids))
+            ).distinct()
+            
+            # 应用其他过滤条件
+            for filter_key, filter_value in filters.items():
+                if hasattr(UserCanvasService.model, filter_key):
+                    shared_canvas_list = shared_canvas_list.where(
+                        getattr(UserCanvasService.model, filter_key) == filter_value
+                    )
+            
+            # 添加到结果列表
+            for c in shared_canvas_list:
+                try:
+                    canvas_dict = c.to_dict()
+                    
+                    # 获取创建者信息
+                    user = User.select().where(User.id == c.user_id).first()
+                    if user:
+                        canvas_dict["nickname"] = user.nickname
+                        
+                    # 标记为共享的Canvas
+                    canvas_dict["is_own"] = False
+                    canvas_dict["is_shared"] = True
+                    result.append(canvas_dict)
+                except Exception as e:
+                    logging.error(f"共享Canvas对象转换为字典时出错: {e}")
+                    continue
         
         # 按更新时间倒序排序
         if result:
@@ -110,6 +151,7 @@ def rm():
             return get_json_result(
                 data=False, message='Only owner of canvas authorized for this operation.',
                 code=RetCode.OPERATING_ERROR)
+        # 不再操作 UserCanvasPermission 表
         UserCanvasService.delete_by_id(i)
     return get_json_result(data=True)
 
@@ -461,15 +503,20 @@ def setting():
 def update_permissions():
     req = request.json
     canvas_ids = req["canvas_ids"]
-    user_ids = req["user_ids"]
-
+    
+    # 不再使用 UserCanvasPermission 表，改为直接设置 Canvas 的 permission 属性
     for canvas_id in canvas_ids:
         e, canvas = UserCanvasService.get_by_id(canvas_id)
         if not e or canvas.user_id != current_user.id:
             return get_json_result(data=False, message='Only owner of canvas authorized for this operation.', code=RetCode.OPERATING_ERROR)
-
-    updated_count = UserCanvasService.update_permissions(canvas_ids, user_ids)
-    return get_json_result(data=updated_count)
+        
+        # 直接修改 Canvas 的 permission 属性为 "team"
+        canvas_dict = canvas.to_dict()
+        canvas_dict["permission"] = "team"
+        UserCanvasService.update_by_id(canvas_id, canvas_dict)
+        logging.info(f"Canvas {canvas_id} 权限模式已设置为 team")
+    
+    return get_json_result(data=True)
 
 @manager.route('/get_by_catalog', methods=['POST'])  # noqa: F821
 @validate_request("catalog")
@@ -576,11 +623,23 @@ def clone():
         # 检查是否是所有者
         if source_canvas.user_id == current_user.id:
             has_permission = True
-        # 不是所有者，检查是否有权限记录
+        # 不是所有者，检查是否是团队共享
         else:
-            permissions = UserCanvasPermission.query(user_id=current_user.id, canvas_id=source_id)
-            if permissions:
-                has_permission = True
+            # 获取当前用户所属的租户
+            tenants = TenantService.get_joined_tenants_by_user_id(current_user.id)
+            tenant_ids = [m["tenant_id"] for m in tenants] if tenants else []
+            
+            if tenant_ids:
+                from api.db.db_models import UserTenant
+                # 检查源Canvas创建者是否与当前用户在同一租户，且Canvas权限为team
+                creator_in_same_tenant = UserTenant.select().where(
+                    (UserTenant.user_id == source_canvas.user_id) &
+                    (UserTenant.tenant_id.in_(tenant_ids))
+                ).exists()
+                
+                if creator_in_same_tenant and source_canvas.permission == "team":
+                    has_permission = True
+                    logging.info(f"用户 {current_user.id} 通过团队共享权限访问 Canvas {source_id}")
                 
         if not has_permission:
             return get_json_result(

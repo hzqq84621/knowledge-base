@@ -765,6 +765,7 @@ export const useCreateAgent = () => {
       const requestPayload = {
         canvas_ids: [canvasId],
         user_ids: finalUserIds,
+        permission: 'team', // 添加 permission 参数，指定为 "team"
       };
 
       console.log('设置权限使用的用户IDs:', finalUserIds);
