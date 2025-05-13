@@ -1,11 +1,147 @@
 {
   "id": 1,
   "title": "通用型",
-  "description": "一个通用型的助手，可以根据相关知识库文档提供回答。",
+  "description": "一个基于知识库的通用型问答助手",
   "canvas_type": "chatbot",
   "dsl": {
     "answer": [],
-    "components": {},
+    "components": {
+      "begin": {
+        "downstream": [
+          "Answer:LateCamerasSearch"
+        ],
+        "obj": {
+          "component_name": "Begin",
+          "inputs": [],
+          "output": null,
+          "params": {
+            "debug_inputs": [],
+            "inputs": [],
+            "message_history_window_size": 22,
+            "output": null,
+            "output_var_name": "output",
+            "prologue": "你好！ 有什么可以帮您？",
+            "query": []
+          }
+        },
+        "upstream": []
+      },
+      "Answer:LateCamerasSearch": {
+        "downstream": [
+          "RewriteQuestion:SmartSingersAttend"
+        ],
+        "obj": {
+          "component_name": "Answer",
+          "inputs": [],
+          "output": null,
+          "params": {
+            "debug_inputs": [],
+            "inputs": [],
+            "message_history_window_size": 22,
+            "output": null,
+            "output_var_name": "output",
+            "post_answers": [],
+            "query": []
+          }
+        },
+        "upstream": [
+          "begin",
+          "Generate:NewHorsesBuy"
+        ]
+      },
+      "Generate:NewHorsesBuy": {
+        "downstream": [
+          "Answer:LateCamerasSearch"
+        ],
+        "obj": {
+          "component_name": "Generate",
+          "inputs": [],
+          "output": null,
+          "params": {
+            "cite": true,
+            "debug_inputs": [],
+            "frequency_penalty": 0.7,
+            "inputs": [],
+            "llm_id": "qwen-max@Tongyi-Qianwen",
+            "max_tokens": 256,
+            "message_history_window_size": 12,
+            "output": null,
+            "output_var_name": "output",
+            "parameters": [],
+            "presence_penalty": 0.4,
+            "prompt": "Task: Please answer the question based on content of knowledge base. \n\nRequirements & restrictions:\n  -  DO NOT make things up when all knowledge base content is irrelevant to the question. \n  - Answers need to consider chat history.\n \n\n      Knowledge base content is as following:\n       {Retrieval:RudeClocksMake}\n      The above is the content of knowledge base.",
+            "query": [],
+            "temperature": 0.1,
+            "top_p": 0.3
+          }
+        },
+        "upstream": [
+          "Retrieval:RudeClocksMake"
+        ]
+      },
+      "RewriteQuestion:SmartSingersAttend": {
+        "downstream": [
+          "Retrieval:RudeClocksMake"
+        ],
+        "obj": {
+          "component_name": "RewriteQuestion",
+          "inputs": [],
+          "output": null,
+          "params": {
+            "debug_inputs": [],
+            "frequency_penalty": 0.7,
+            "inputs": [],
+            "language": "",
+            "llm_id": "qwen-max@Tongyi-Qianwen",
+            "max_tokens": 256,
+            "message_history_window_size": 12,
+            "output": null,
+            "output_var_name": "output",
+            "parameter": "Precise",
+            "presence_penalty": 0.4,
+            "query": [],
+            "temperature": 0.1,
+            "top_p": 0.3
+          }
+        },
+        "upstream": [
+          "Answer:LateCamerasSearch"
+        ]
+      },
+      "Retrieval:RudeClocksMake": {
+        "downstream": [
+          "Generate:NewHorsesBuy"
+        ],
+        "obj": {
+          "component_name": "Retrieval",
+          "inputs": [],
+          "output": null,
+          "params": {
+            "debug_inputs": [],
+            "empty_response": "",
+            "inputs": [],
+            "kb_ids": [],
+            "keywords_similarity_weight": 0.3,
+            "message_history_window_size": 22,
+            "output": null,
+            "output_var_name": "output",
+            "query": [
+              {
+                "component_id": "Answer:LateCamerasSearch",
+                "type": "reference"
+              }
+            ],
+            "similarity_threshold": 0.14,
+            "top_k": 1024,
+            "top_n": 3,
+            "use_kg": false
+          }
+        },
+        "upstream": [
+          "RewriteQuestion:SmartSingersAttend"
+        ]
+      }
+    },
     "embed_id": "",
     "graph": {
       "edges": [
@@ -237,5 +373,5 @@
     "path": [],
     "reference": []
   },
-  "avatar": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDUwIDUwIiBmaWxsPSJub25lIj4KICA8cmVjdCB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiMyQjc0RkYiIHJ4PSI4Ii8+CiAgPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xOC4zMzM5IDI1LjM4NTdDMjAuMzY0NiAyMi41MzgxIDIzLjYwNTYgMjAuNiAyNy43MjkgMjAuMkMyOC4yODUzIDIwLjE0MjkgMjguNDg1OSAyMC43NDI5IDI4LjA1NzUgMjEuMTQyOUMyNS4xNDM5IDIzLjg1NzEgMjEuNjQ1MiAyNC44ODU3IDIwLjMwNzUgMjcuNDI4NkMyMC4xNjM5IDI3LjY4NTcgMjAuMDc3NSAyNy45NzE0IDIwLjAxMzkgMjguMjY4NkMyMC4wNTIxIDI4LjI1NzEgMjAuMDkwMyAyOC4yNDU3IDIwLjEyODUgMjguMjIyOUMyMC45MDMgMjcuODExNCAyMS43NDMyIDI3LjY1NzEgMjIuNjI5MiAyNy43NzE0QzIzLjUzNjcgMjcuODg1NyAyNC4zNzY5IDI4LjM2ODYgMjUuMDQ3NiAyOS4wNTcxQzI1LjcxODIgMjkuNzM0MyAyNi4xOTIxIDMwLjU4ODYgMjYuMzAyOCAzMS40ODU3QzI2LjQxMzYgMzIuMzgyOSAyNi4yNTg0IDMzLjI5MTQgMjUuODQyOSAzNC4wNTcxQzI1LjQzOSAzNC44MTE0IDI0Ljc4MTIgMzUuNDM0MyAyMy45OTU3IDM1LjgzNDNDMjMuMjIxMSAzNi4yMzQzIDIyLjMxOTIgMzYuNCAyMS40MjMzIDM2LjI4NTdDMjAuNTI3NCAzNi4xNzE0IDE5LjY4NzIgMzUuNjg4NiAxOS4wMTY1IDM1QzE4LjM0NTkgMzQuMzIyOSAxNy44NzIgMzMuNDY4NiAxNy43NjEzIDMyLjU3MTRDMTcuNjUwNSAzMS42NzQzIDE3LjgwNTggMzAuNzY1NyAxOC4yMjEzIDMwQzE4LjYzNjggMjkuMjM0MyAxOS4yOTQ2IDI4LjYxMTQgMjAuMDgwMSAyOC4yMTE0QzIwLjA0MTkgMjguMjIyOSAyMC4wMDM3IDI4LjIzNDMgMTkuOTY1NSAyOC4yNDU3QzE4Ljg1MTIgMjguODU3MSAxOC4wNDQgMjkuOTQyOSAxNy42Mzk0IDMxLjE3MTRDMTcuMTk5NSAzMi40OTE0IDE3LjIzNzcgMzMuOTQyOSAxNy43NjEzIDM1LjIzNDNDMTguMjg0OCAzNi41MjU3IDE5LjI2MzMgMzcuNjExNCAxMC41NTQxIDM4LjE3MTRDMjEuODQ0OCAzOC43MiAyMy4yMjExIDM4LjcwODYgMjQuNDgyIDM4LjE3MTRDMjUuNzQyOSAzNy42MzQzIDI2LjgwNjUgMzYuNjQ1NyAyNy41MTY2IDM1LjQxMTRDMjguMTY1MiAzNC4yIDI4LjQzMTkgMzIuNzk0MyAyOC4yNzM4IDMxLjRDMjguMTE1NyAzMC4wMDU3IDI3LjU0NjYgMjguNjg1NyAyNi42MjQ5IDI3LjY1NzFDMjUuNjkxOCAyNi42MTcxIDI0LjQ1NTQgMjUuODk3MSAyMy4wNzg2IDI1LjYwQzIyLjM4ODUgMjUuNDQ1NyAyMS42ODY3IDI1LjM4NTcgMjAuOTg0OCwyNS40MzQzQzIzLjAyNzMgMjEuOTY1NyAyNy4wNDY1IDE3LjggMzMuNTEwOSAyMy44QzMzLjcwMTUgMjMuOTc3MSAzMy41NDYzIDI0LjI5NzEgMzMuMjY4IDI0LjE3NzFDMjkuODYwOCAyMi44NTcxIDI2Ljg0NDcgMjIuOTAyOSAyNC40MzM4IDI0LjEwODZDMjcuMTM0OCAyMi40OTcxIDMwLjMzMzMgMjEuOTg4NiAzMy40NDQzIDIyLjY0MjlDMzMuNzAxNSAyMi42ODU3IDMzLjgzMjggMjMuMDE3MSAzMy41OTMyIDIzLjJDMjkuNDA4MyAyNi41NzE0IDI1LjI5NyAyNy4yIDE4Ljc1MDEgMzMuNDExNEMxOC41OTM0IDMzLjU2NTcgMTguMzUzNiAzMy42MTE0IDE4LjE0MjMgMzMuNUMxNy45MzEgMzMuMzg4NiAxNy44MDExIDMzLjEzNzEgMTcuODM5MyAzMi44NjI5QzE3LjgzOTMgMjkuNjkxNCAxNy42Mjk2IDI3LjU4MjkgMTguMzMzOSAyNS4zODU3WiIvPgo8L3N2Zz4K"
+  "avatar": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDUwIDUwIiBmaWxsPSJub25lIj4KICA8cmVjdCB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiMyRThCNTciIHJ4PSI4Ii8+CiAgPHBvbHlnb24gcG9pbnRzPSIyNS4wLDEyLjUgMzcuNSwzNy41IDEyLjUsMzcuNSIgZmlsbD0id2hpdGUiLz4KPC9zdmc+"
 }
