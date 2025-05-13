@@ -181,7 +181,7 @@ export function deleteKnowledgeGraph(knowledgeId: string) {
 export const listDataset = (
   params?: IFetchKnowledgeListRequestParams,
   body?: IFetchKnowledgeListRequestBody,
-) => request.post(api.kb_list, { data: body || {}, params });
+) => request.get(api.kb_list, { params: { ...params, ...body } });
 
 export const listDocument = (
   params?: IFetchKnowledgeListRequestParams,
