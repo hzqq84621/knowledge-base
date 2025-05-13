@@ -40,7 +40,6 @@ def templates():
 @manager.route('/list', methods=['GET'])  # noqa: F821
 @login_required
 def canvas_list():
-<<<<<<< HEAD
     try:
         # 尝试从请求中获取查询参数
         query_params = request.json or {}  # 如果request.json为None，使用空字典
@@ -141,28 +140,6 @@ def canvas_list():
     except Exception as e:
         logging.exception(f"canvas_list接口异常: {e}")
         return get_json_result(data=[], message=f"获取列表失败: {str(e)}")
-=======
-    query_params = request.json
-    filters = {}
-    if 'catalog' in query_params:
-        filters['catalog'] = query_params['catalog']
-    if 'is_virtual' in query_params:
-        filters['is_virtual'] = query_params['is_virtual']
-    if 'id' in query_params:
-        filters['id'] = query_params['id']
-
-    results = UserCanvasService.query(user_id=current_user.id, **filters)
-
-    user_tenants = UserTenantService.get_tenants_by_user_id(current_user.id)
-
-    me_canvases = [c for c in results if c.permission == 'me' and c.user_id == current_user.id]
-
-    team_canvases = [c for c in results if c.permission == 'team' and c.user_id in user_tenants]
-
-    results = me_canvases + team_canvases
-
-    return get_json_result(data=sorted([c.to_dict() for c in results], key=lambda x: x["update_time"]*-1))
->>>>>>> hzq
 
 
 @manager.route('/rm', methods=['POST'])  # noqa: F821
