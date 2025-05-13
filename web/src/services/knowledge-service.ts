@@ -59,7 +59,7 @@ const methods = {
   },
   getList: {
     url: kb_list,
-    method: 'post', // 修改为 get 方法，以匹配后端接口
+    method: 'get', // 修改为 get 方法，以匹配后端接口
   },
   // document manager
   get_document_list: {
@@ -181,7 +181,7 @@ export function deleteKnowledgeGraph(knowledgeId: string) {
 export const listDataset = (
   params?: IFetchKnowledgeListRequestParams,
   body?: IFetchKnowledgeListRequestBody,
-) => request.get(api.kb_list, { params: { ...params, ...body } });
+) => request.post(api.kb_list, { data: params || {} });
 
 export const listDocument = (
   params?: IFetchKnowledgeListRequestParams,
