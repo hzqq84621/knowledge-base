@@ -135,8 +135,9 @@ def set_api_key():
 @manager.route('/add_llm', methods=['POST'])  # noqa: F821
 @login_required
 @validate_request("llm_factory")
-def add_llm():
-    req = request.json
+def add_llm(req=None):
+    if req is None:
+        req = request.json
     factory = req["llm_factory"]
     api_key = req.get("api_key", "x")
     llm_name = req.get("llm_name")

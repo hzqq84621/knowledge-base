@@ -18,6 +18,7 @@ import json
 import re
 from datetime import datetime
 
+from api.apps.llm_app import add_llm
 from flask import request, session, redirect
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_required, current_user, login_user, logout_user
@@ -693,6 +694,16 @@ def user_add():
     }
 
     user_id = get_uuid()
+    llm_data = {
+        "tenant_id": user_id,
+        "llm_factory": "VLLM",
+        "model_type": "chat",
+        "llm_name": "default_llm",
+        "api_base": "http://192.168.110.214:8000/v1",
+        "api_key": "",
+        "max_tokens": 1000
+    }
+    add_llm(llm_data)
     try:
         users = user_register(user_id, user_dict)
         if not users:
