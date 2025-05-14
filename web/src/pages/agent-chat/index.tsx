@@ -53,6 +53,23 @@ import RenameConversationModal from './rename-conversation-modal';
 
 const { Text } = Typography;
 
+// 用户ID到昵称的映射表
+const USER_NICKNAME_MAP: Record<string, string> = {
+  // 请根据实际情况添加更多用户ID到昵称的映射
+  '38e1025691ff09c8263774d5a89e': '123', // 用户123的ID
+  '123456789abcdef': '456', // 用户456的ID
+  // 可以继续添加更多映射...
+};
+
+// 辅助函数：打印用户ID以便添加到映射表
+const logUserIdForMapping = (agent: any) => {
+  if (agent && agent.user_id) {
+    console.log(
+      `发现未映射的用户ID: ${agent.user_id}，请添加到USER_NICKNAME_MAP中`,
+    );
+  }
+};
+
 /**
  * Agent接口定义
  * 描述Agent的基本信息结构
@@ -173,6 +190,56 @@ const AgentChat = () => {
   } = useRenameConversation();
 
   /**
+   * 添加调试函数，在渲染前打印助理列表的详细信息
+   */
+  useEffect(() => {
+    if (agentList && agentList.length > 0) {
+      console.log('=== 调试信息: 助理列表数据 ===');
+      agentList.forEach((agent: any, index) => {
+        console.log(`助理 ${index + 1}:`, {
+          id: agent.id,
+          title: agent.title,
+          permission: agent.permission,
+          is_own: agent.is_own,
+          nickname: agent.nickname,
+          user_id: agent.user_id,
+          tenant_avatar: agent.tenant_avatar,
+          is_shared: agent.is_shared,
+        });
+      });
+      console.log(
+        '是否有共享助理:',
+        agentList.some((agent: any) => agent.permission === 'team'),
+      );
+      console.log(
+        '是否有非自己创建的助理:',
+        agentList.some((agent: any) => agent.is_own === false),
+      );
+    }
+  }, [agentList]);
+
+  /**
+   * 添加获取用户昵称的辅助函数
+   */
+  const getUserNickname = useCallback((agent: any) => {
+    // 如果agent对象中有nickname字段，直接使用，不再区分是否是自己创建的
+    if (agent.nickname) {
+      return agent.nickname;
+    }
+
+    // 如果USER_NICKNAME_MAP中有映射，使用映射值
+    if (agent.user_id && USER_NICKNAME_MAP[agent.user_id]) {
+      return USER_NICKNAME_MAP[agent.user_id];
+    }
+
+    // 打印未映射的用户ID
+    logUserIdForMapping(agent);
+
+    // 没有任何昵称时使用默认值
+    return agent.is_own ? '共享中' : '已共享';
+  }, []);
+
+  /**
    * 处理搜索输入框变化
    * 更新搜索关键词状态
    */
@@ -182,6 +249,26 @@ const AgentChat = () => {
     },
     [],
   );
+
+  /**
+   * 修改过滤后的助理列表处理，添加更多调试信息
+   */
+  const filteredAgentList = useMemo(() => {
+    if (!searchString) {
+      console.log('未过滤的助理列表数量:', agentList.length);
+      return agentList;
+    }
+
+    // 根据标题和描述进行过滤
+    const filtered = agentList.filter(
+      (agent: IAgent) =>
+        agent.title.toLowerCase().includes(searchString.toLowerCase()) ||
+        (agent.description &&
+          agent.description.toLowerCase().includes(searchString.toLowerCase())),
+    );
+    console.log('过滤后的助理列表数量:', filtered.length);
+    return filtered;
+  }, [agentList, searchString]);
 
   /**
    * 处理Agent卡片点击事件
@@ -351,22 +438,6 @@ const AgentChat = () => {
   );
 
   /**
-   * 过滤Agent列表
-   * 根据搜索关键词过滤Agent列表
-   */
-  const filteredAgentList = useMemo(() => {
-    if (!searchString) return agentList;
-
-    // 根据标题和描述进行过滤
-    return agentList.filter(
-      (agent: IAgent) =>
-        agent.title.toLowerCase().includes(searchString.toLowerCase()) ||
-        (agent.description &&
-          agent.description.toLowerCase().includes(searchString.toLowerCase())),
-    );
-  }, [agentList, searchString]);
-
-  /**
    * 组件挂载时获取Agent列表
    * 确保页面加载后展示最新数据
    */
@@ -428,62 +499,97 @@ const AgentChat = () => {
             >
               {filteredAgentList && filteredAgentList.length > 0 ? (
                 filteredAgentList.map((agent: any) => (
-                  <Card
-                    key={agent.id}
-                    hoverable
-                    className={classNames(styles.agentAppCard, {
-                      [theme === 'dark'
-                        ? styles.agentAppCardSelectedDark
-                        : styles.agentAppCardSelected]:
-                        agent.id === activeAgentId,
-                    })}
-                    onClick={handleAgentCardClick(agent.id)}
-                  >
-                    <Flex align="center" justify="space-between">
-                      <Flex align="center" style={{ overflow: 'hidden' }}>
-                        {/* Agent头像 */}
-                        <img
-                          src={agent.avatar || '/logo.svg'}
-                          alt=""
-                          className={styles.agentCardIcon}
-                          style={{ marginRight: '8px' }}
-                        />
-                        <Flex
-                          vertical
-                          style={{ width: 150, overflow: 'hidden' }}
-                        >
-                          {/* Agent标题 */}
-                          <Text
-                            className={styles.agentCardTitle}
-                            ellipsis={{ tooltip: agent.title }}
-                          >
-                            {agent.title}
-                          </Text>
-                          {/* Agent描述 */}
-                          <Text
-                            type="secondary"
-                            className={styles.agentCardDescription}
-                            ellipsis={{ tooltip: agent.description }}
-                          >
-                            {agent.description || t('noDescription')}
-                          </Text>
-                        </Flex>
-                      </Flex>
-                      {/* Agent操作按钮 */}
+                  <div style={{ position: 'relative' }} key={agent.id}>
+                    {(agent.permission === 'team' ||
+                      agent.is_own === false ||
+                      agent.nickname) && (
                       <div
-                        style={{ width: 30, textAlign: 'right', flexShrink: 0 }}
+                        style={{
+                          position: 'absolute',
+                          top: '10px',
+                          right: '-5px',
+                          zIndex: 10,
+                          background:
+                            agent.is_own === true ? '#1677ff' : '#ff85c0',
+                          color: 'white',
+                          padding: '4px 12px',
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          borderRadius: '4px 0 0 4px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                          minWidth: '55px',
+                          textAlign: 'center',
+                          height: '24px',
+                          lineHeight: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
                       >
-                        {/* 删除按钮 */}
-                        <DeleteOutlined
-                          className={styles.agentActionIcon}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            confirmDeleteAgent(agent.id);
-                          }}
-                        />
+                        {/* 只显示创建者的昵称 */}
+                        {getUserNickname(agent)}
                       </div>
-                    </Flex>
-                  </Card>
+                    )}
+                    <Card
+                      hoverable
+                      className={classNames(styles.agentAppCard, {
+                        [theme === 'dark'
+                          ? styles.agentAppCardSelectedDark
+                          : styles.agentAppCardSelected]:
+                          agent.id === activeAgentId,
+                      })}
+                      onClick={handleAgentCardClick(agent.id)}
+                    >
+                      <Flex align="center" justify="space-between">
+                        <Flex align="center" style={{ overflow: 'hidden' }}>
+                          {/* Agent头像 */}
+                          <img
+                            src={agent.avatar || '/logo.svg'}
+                            alt=""
+                            className={styles.agentCardIcon}
+                            style={{ marginRight: '8px' }}
+                          />
+                          <Flex
+                            vertical
+                            style={{ width: 150, overflow: 'hidden' }}
+                          >
+                            {/* Agent标题 */}
+                            <Text
+                              className={styles.agentCardTitle}
+                              ellipsis={{ tooltip: agent.title }}
+                            >
+                              {agent.title}
+                            </Text>
+                            {/* Agent描述 */}
+                            <Text
+                              type="secondary"
+                              className={styles.agentCardDescription}
+                              ellipsis={{ tooltip: agent.description }}
+                            >
+                              {agent.description || t('noDescription')}
+                            </Text>
+                          </Flex>
+                        </Flex>
+                        {/* Agent操作按钮 */}
+                        <div
+                          style={{
+                            width: 30,
+                            textAlign: 'right',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {/* 删除按钮 */}
+                          <DeleteOutlined
+                            className={styles.agentActionIcon}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              confirmDeleteAgent(agent.id);
+                            }}
+                          />
+                        </div>
+                      </Flex>
+                    </Card>
+                  </div>
                 ))
               ) : (
                 <Empty description={t('noAgents')} />
