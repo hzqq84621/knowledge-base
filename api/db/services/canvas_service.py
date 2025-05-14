@@ -151,7 +151,6 @@ class UserCanvasService(CommonService):
 def completion(tenant_id, agent_id, question, session_id=None, stream=True, **kwargs):
     e, cvs = UserCanvasService.get_by_id(agent_id)
     assert e, "Agent not found."
-    assert cvs.user_id == tenant_id, "You do not own the agent."
     if not isinstance(cvs.dsl,str):
         cvs.dsl = json.dumps(cvs.dsl, ensure_ascii=False)
     canvas = Canvas(cvs.dsl, tenant_id)
@@ -257,14 +256,6 @@ def completionOpenAI(tenant_id, agent_id, question, session_id=None, stream=True
             id=session_id,
             model=agent_id,
             content="**ERROR**: Agent not found."
-        )
-        return
-    
-    if cvs.user_id != tenant_id:
-        yield get_data_openai(
-            id=session_id,
-            model=agent_id,
-            content="**ERROR**: You do not own the agent"
         )
         return
     

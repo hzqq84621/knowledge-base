@@ -40,67 +40,6 @@ def templates():
 @manager.route('/list', methods=['GET'])  # noqa: F821
 @login_required
 def canvas_list():
-<<<<<<< HEAD
-    try:
-        # 尝试从请求中获取查询参数
-        query_params = request.json or {}  # 如果request.json为None，使用空字典
-        
-        # 也支持从URL参数中获取查询条件（适用于GET请求）
-        url_params = request.args.to_dict() if request.args else {}
-        
-        # 合并JSON和URL参数，URL参数优先级更高
-        params = {**query_params, **url_params}
-        
-        filters = {}
-        
-        # 构建过滤条件
-        if params and 'catalog' in params:
-            filters['catalog'] = params['catalog']
-        if params and 'is_virtual' in params:
-            # 确保布尔值类型正确转换
-            is_virtual_value = params['is_virtual']
-            if isinstance(is_virtual_value, str):
-                if is_virtual_value.lower() == 'true':
-                    is_virtual_value = True
-                elif is_virtual_value.lower() == 'false':
-                    is_virtual_value = False
-                elif is_virtual_value.isdigit():
-                    is_virtual_value = bool(int(is_virtual_value))
-            filters['is_virtual'] = is_virtual_value
-        if params and 'id' in params:
-            filters['id'] = params['id']
-        
-        logging.info(f"Canvas列表查询条件: user_id={current_user.id}, filters={filters}")
-        
-        # 查询数据库
-        canvas_list = UserCanvasService.query(user_id=current_user.id, **filters)
-        
-        # 确保查询结果存在
-        if not canvas_list:
-            logging.warning(f"未找到满足条件的记录: user_id={current_user.id}, filters={filters}")
-            return get_json_result(data=[])
-        
-        # 转换为字典列表并排序
-        result = []
-        for c in canvas_list:
-            try:
-                # 确保每个canvas对象可以正确转换为字典
-                canvas_dict = c.to_dict()
-                result.append(canvas_dict)
-            except Exception as e:
-                logging.error(f"canvas对象转换为字典时出错: {e}")
-                # 跳过出错的对象，继续处理其他对象
-                continue
-        
-        # 按更新时间倒序排序
-        if result:
-            result = sorted(result, key=lambda x: x.get("update_time", 0) * -1)
-        
-        return get_json_result(data=result)
-    except Exception as e:
-        logging.exception(f"canvas_list接口异常: {e}")
-        return get_json_result(data=[], message=f"获取列表失败: {str(e)}")
-=======
     query_params = request.json
     filters = {}
     if 'catalog' in query_params:
@@ -121,7 +60,6 @@ def canvas_list():
     results = me_canvases + team_canvases
 
     return get_json_result(data=sorted([c.to_dict() for c in results], key=lambda x: x["update_time"]*-1))
->>>>>>> hzq
 
 
 @manager.route('/rm', methods=['POST'])  # noqa: F821
@@ -176,11 +114,6 @@ def save():
         if not UserCanvasService.save(**req):
             return get_data_error_result(message="Fail to save canvas.")
     else:
-        # 更新现有记录
-        if not UserCanvasService.query(user_id=current_user.id, id=req["id"]):
-            return get_json_result(
-                data=False, message='Only owner of canvas authorized for this operation.',
-                code=RetCode.OPERATING_ERROR)
         
         # 获取现有记录，确保catalog被保留
         e, existing_canvas = UserCanvasService.get_by_id(req["id"])
@@ -241,10 +174,6 @@ def run():
     e, cvs = UserCanvasService.get_by_id(req["id"])
     if not e:
         return get_data_error_result(message="canvas not found.")
-    if not UserCanvasService.query(user_id=current_user.id, id=req["id"]):
-        return get_json_result(
-            data=False, message='Only owner of canvas authorized for this operation.',
-            code=RetCode.OPERATING_ERROR)
 
     if not isinstance(cvs.dsl, str):
         cvs.dsl = json.dumps(cvs.dsl, ensure_ascii=False)
@@ -324,10 +253,6 @@ def reset():
         e, user_canvas = UserCanvasService.get_by_id(req["id"])
         if not e:
             return get_data_error_result(message="canvas not found.")
-        if not UserCanvasService.query(user_id=current_user.id, id=req["id"]):
-            return get_json_result(
-                data=False, message='Only owner of canvas authorized for this operation.',
-                code=RetCode.OPERATING_ERROR)
 
         canvas = Canvas(json.dumps(user_canvas.dsl), current_user.id)
         canvas.reset()
@@ -347,10 +272,6 @@ def input_elements():
         e, user_canvas = UserCanvasService.get_by_id(cvs_id)
         if not e:
             return get_data_error_result(message="canvas not found.")
-        if not UserCanvasService.query(user_id=current_user.id, id=cvs_id):
-            return get_json_result(
-                data=False, message='Only owner of canvas authorized for this operation.',
-                code=RetCode.OPERATING_ERROR)
 
         canvas = Canvas(json.dumps(user_canvas.dsl), current_user.id)
         return get_json_result(data=canvas.get_component_input_elements(cpn_id))
@@ -369,10 +290,6 @@ def debug():
         e, user_canvas = UserCanvasService.get_by_id(req["id"])
         if not e:
             return get_data_error_result(message="canvas not found.")
-        if not UserCanvasService.query(user_id=current_user.id, id=req["id"]):
-            return get_json_result(
-                data=False, message='Only owner of canvas authorized for this operation.',
-                code=RetCode.OPERATING_ERROR)
 
         canvas = Canvas(json.dumps(user_canvas.dsl), current_user.id)
         canvas.get_component(req["component_id"])["obj"]._param.debug_inputs = req["params"]
@@ -471,10 +388,6 @@ def setting():
         flow["permission"] = req["permission"]
     if req["avatar"]:
         flow["avatar"] = req["avatar"]
-    if not UserCanvasService.query(user_id=current_user.id, id=req["id"]):
-        return get_json_result(
-            data=False, message='Only owner of canvas authorized for this operation.',
-            code=RetCode.OPERATING_ERROR)
     num= UserCanvasService.update_by_id(req["id"], flow)
     return get_json_result(data=num)
 
