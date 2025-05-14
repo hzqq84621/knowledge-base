@@ -294,11 +294,7 @@ const AgentChatContainer = ({
         <div>
           <Spin spinning={loading}>
             <div className={styles.messagePlaceholder}>
-              {!agentId ? (
-                <div className={styles.emptyMessage}>{t('selectAgent')}</div>
-              ) : messages.length === 0 ? (
-                <div className={styles.emptyMessage}>{t('noMessages')}</div>
-              ) : (
+              {messages.length > 0 && (
                 <div className={styles.messageList}>
                   {messages.map((message, i) => (
                     <MessageItem
