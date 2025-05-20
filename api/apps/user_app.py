@@ -18,7 +18,7 @@ import json
 import re
 from datetime import datetime
 
-from api.apps.llm_app import add_llm
+
 from flask import request, session, redirect
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_required, current_user, login_user, logout_user
@@ -694,6 +694,9 @@ def user_add():
     }
 
     user_id = get_uuid()
+    
+
+    
     llm_data = {
         "tenant_id": user_id,
         "llm_factory": "VLLM",
@@ -703,7 +706,159 @@ def user_add():
         "api_key": "",
         "max_tokens": 1000
     }
+    def add_llm():
+        if req is None:
+            req = request.json
+        factory = req["llm_factory"]
+        api_key = req.get("api_key", "x")
+        llm_name = req.get("llm_name")
+
+        def apikey_json(keys):
+            nonlocal req
+            return json.dumps({k: req.get(k, "") for k in keys})
+
+        if factory == "VolcEngine":
+            # For VolcEngine, due to its special authentication method
+            # Assemble ark_api_key endpoint_id into api_key
+            api_key = apikey_json(["ark_api_key", "endpoint_id"])
+
+        elif factory == "Tencent Hunyuan":
+            req["api_key"] = apikey_json(["hunyuan_sid", "hunyuan_sk"])
+            return set_api_key()
+
+        elif factory == "Tencent Cloud":
+            req["api_key"] = apikey_json(["tencent_cloud_sid", "tencent_cloud_sk"])
+            return set_api_key()
+
+        elif factory == "Bedrock":
+            # For Bedrock, due to its special authentication method
+            # Assemble bedrock_ak, bedrock_sk, bedrock_region
+            api_key = apikey_json(["bedrock_ak", "bedrock_sk", "bedrock_region"])
+
+        elif factory == "LocalAI":
+            llm_name += "___LocalAI"
+
+        elif factory == "HuggingFace":
+            llm_name += "___HuggingFace"
+
+        elif factory == "OpenAI-API-Compatible":
+            llm_name += "___OpenAI-API"
+
+        elif factory == "VLLM":
+            llm_name += "___VLLM"
+
+        elif factory == "XunFei Spark":
+            if req["model_type"] == "chat":
+                api_key = req.get("spark_api_password", "")
+            elif req["model_type"] == "tts":
+                api_key = apikey_json(["spark_app_id", "spark_api_secret", "spark_api_key"])
+
+        elif factory == "BaiduYiyan":
+            api_key = apikey_json(["yiyan_ak", "yiyan_sk"])
+
+        elif factory == "Fish Audio":
+            api_key = apikey_json(["fish_audio_ak", "fish_audio_refid"])
+
+        elif factory == "Google Cloud":
+            api_key = apikey_json(["google_project_id", "google_region", "google_service_account_key"])
+
+        elif factory == "Azure-OpenAI":
+            api_key = apikey_json(["api_key", "api_version"])
+
+        llm = {
+            "tenant_id": current_user.id,
+            "llm_factory": factory,
+            "model_type": req["model_type"],
+            "llm_name": llm_name,
+            "api_base": req.get("api_base", ""),
+            "api_key": api_key,
+            "max_tokens": req.get("max_tokens")
+        }
+
+        msg = ""
+        mdl_nm = llm["llm_name"].split("___")[0]
+        if llm["model_type"] == LLMType.EMBEDDING.value:
+            assert factory in EmbeddingModel, f"Embedding model from {factory} is not supported yet."
+            mdl = EmbeddingModel[factory](
+                key=llm['api_key'],
+                model_name=mdl_nm,
+                base_url=llm["api_base"])
+            try:
+                arr, tc = mdl.encode(["Test if the api key is available"])
+                if len(arr[0]) == 0:
+                    raise Exception("Fail")
+            except Exception as e:
+                msg += f"\nFail to access embedding model({mdl_nm})." + str(e)
+        elif llm["model_type"] == LLMType.CHAT.value:
+            assert factory in ChatModel, f"Chat model from {factory} is not supported yet."
+            mdl = ChatModel[factory](
+                key=llm['api_key'],
+                model_name=mdl_nm,
+                base_url=llm["api_base"]
+            )
+            try:
+                m, tc = mdl.chat(None, [{"role": "user", "content": "Hello! How are you doing!"}], {
+                    "temperature": 0.9})
+                if not tc and m.find("**ERROR**:") >= 0:
+                    raise Exception(m)
+            except Exception as e:
+                msg += f"\nFail to access model({mdl_nm})." + str(
+                    e)
+        elif llm["model_type"] == LLMType.RERANK:
+            assert factory in RerankModel, f"RE-rank model from {factory} is not supported yet."
+            try:
+                mdl = RerankModel[factory](
+                    key=llm["api_key"],
+                    model_name=mdl_nm,
+                    base_url=llm["api_base"]
+                )
+                arr, tc = mdl.similarity("Hello~ Ragflower!", ["Hi, there!", "Ohh, my friend!"])
+                if len(arr) == 0:
+                    raise Exception("Not known.")
+            except KeyError:
+                msg += f"{factory} dose not support this model({mdl_nm})"
+            except Exception as e:
+                msg += f"\nFail to access model({mdl_nm})." + str(
+                    e)
+        elif llm["model_type"] == LLMType.IMAGE2TEXT.value:
+            assert factory in CvModel, f"Image to text model from {factory} is not supported yet."
+            mdl = CvModel[factory](
+                key=llm["api_key"],
+                model_name=mdl_nm,
+                base_url=llm["api_base"]
+            )
+            try:
+                with open(os.path.join(get_project_base_directory(), "web/src/assets/yay.jpg"), "rb") as f:
+                    m, tc = mdl.describe(f.read())
+                    if not m and not tc:
+                        raise Exception(m)
+            except Exception as e:
+                msg += f"\nFail to access model({mdl_nm})." + str(e)
+        elif llm["model_type"] == LLMType.TTS:
+            assert factory in TTSModel, f"TTS model from {factory} is not supported yet."
+            mdl = TTSModel[factory](
+                key=llm["api_key"], model_name=mdl_nm, base_url=llm["api_base"]
+            )
+            try:
+                for resp in mdl.tts("Hello~ Ragflower!"):
+                    pass
+            except RuntimeError as e:
+                msg += f"\nFail to access model({mdl_nm})." + str(e)
+        else:
+            # TODO: check other type of models
+            pass
+
+        if msg:
+            return get_data_error_result(message=msg)
+
+        if not TenantLLMService.filter_update(
+                [TenantLLM.tenant_id == current_user.id, TenantLLM.llm_factory == factory,
+                TenantLLM.llm_name == llm["llm_name"]], llm):
+            TenantLLMService.save(**llm)
+
+        return get_json_result(data=True)
     add_llm(llm_data)
+    
     try:
         users = user_register(user_id, user_dict)
         if not users:
@@ -725,7 +880,6 @@ def user_add():
             message=f"User registration failure, error: {str(e)}",
             code=settings.RetCode.EXCEPTION_ERROR,
         )
-
 
 @manager.route("/tenant_info", methods=["GET"])  # noqa: F821
 @login_required
