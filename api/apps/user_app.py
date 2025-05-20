@@ -16,6 +16,8 @@
 import logging
 import json
 import re
+
+import os
 from datetime import datetime
 
 
@@ -23,8 +25,10 @@ from flask import request, session, redirect
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_required, current_user, login_user, logout_user
 
+from api.db import LLMType
 from api.db.db_models import TenantLLM
 from api.db.services.llm_service import TenantLLMService, LLMService
+from rag.llm import EmbeddingModel, ChatModel, RerankModel, CvModel, TTSModel
 from api.utils.api_utils import (
     server_error_response,
     validate_request,
@@ -45,6 +49,8 @@ from api.db.services.file_service import FileService
 from api.utils.api_utils import get_json_result, construct_response
 from api.apps.auth import get_auth_client
 
+
+from api.utils.file_utils import get_project_base_directory
 
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
 def login():
@@ -701,14 +707,13 @@ def user_add():
         "tenant_id": user_id,
         "llm_factory": "VLLM",
         "model_type": "chat",
-        "llm_name": "default_llm",
+        "llm_name": "QwQ-32B",   
         "api_base": "http://192.168.110.214:8000/v1",
         "api_key": "",
-        "max_tokens": 1000
+        "max_tokens": 10000
     }
-    def add_llm():
-        if req is None:
-            req = request.json
+    def add_llm(llm_param):
+        req = llm_param 
         factory = req["llm_factory"]
         api_key = req.get("api_key", "x")
         llm_name = req.get("llm_name")
@@ -766,7 +771,7 @@ def user_add():
             api_key = apikey_json(["api_key", "api_version"])
 
         llm = {
-            "tenant_id": current_user.id,
+            "tenant_id": user_id,
             "llm_factory": factory,
             "model_type": req["model_type"],
             "llm_name": llm_name,
@@ -849,15 +854,18 @@ def user_add():
             pass
 
         if msg:
-            return get_data_error_result(message=msg)
+            return msg
 
         if not TenantLLMService.filter_update(
                 [TenantLLM.tenant_id == current_user.id, TenantLLM.llm_factory == factory,
                 TenantLLM.llm_name == llm["llm_name"]], llm):
             TenantLLMService.save(**llm)
 
-        return get_json_result(data=True)
-    add_llm(llm_data)
+        return ""
+    msg=add_llm(llm_data)
+    if(msg):
+        return get_data_error_result(message=msg)
+
     
     try:
         users = user_register(user_id, user_dict)

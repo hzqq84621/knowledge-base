@@ -136,8 +136,7 @@ def set_api_key():
 @login_required
 @validate_request("llm_factory")
 def add_llm():
-    if req is None:
-        req = request.json
+    req = request.json
     factory = req["llm_factory"]
     api_key = req.get("api_key", "x")
     llm_name = req.get("llm_name")
