@@ -1,6 +1,69 @@
 import { FileMimeType } from '@/constants/common';
 import fileManagerService from '@/services/file-manager-service';
 import { UploadFile } from 'antd';
+  const response = await fileManagerService.getDocumentFile({}, id);
+  
+  // 从文件名获取扩展名
+  const fileExt = filename ? filename.split('.').pop()?.toLowerCase() : '';
+  
+  // 如果没有指定 MIME 类型，尝试从文件扩展名推断
+  let effectiveMimeType = mimeType || response.data.type;
+  
+  // 如果有文件扩展名，检查是否应该使用特定的 MIME 类型
+  if (fileExt) {
+    switch (fileExt) {
+      case 'pdf':
+        effectiveMimeType = FileMimeType.Pdf;
+        break;
+      case 'doc':
+        effectiveMimeType = FileMimeType.Doc;
+        break;
+      case 'docx':
+        effectiveMimeType = FileMimeType.Docx;
+        break;
+      case 'csv':
+        effectiveMimeType = FileMimeType.Csv;
+        break;
+      case 'txt':
+        effectiveMimeType = FileMimeType.Txt;
+        break;
+      case 'html':
+      case 'htm':
+        effectiveMimeType = FileMimeType.Html;
+        break;
+      case 'jpg':
+      case 'jpeg':
+        effectiveMimeType = FileMimeType.Jpeg;
+        break;
+      case 'png':
+        effectiveMimeType = FileMimeType.Png;
+        break;
+      case 'gif':
+        effectiveMimeType = FileMimeType.Gif;
+        break;
+      case 'xls':
+        effectiveMimeType = FileMimeType.Xls;
+        break;
+      case 'xlsx':
+        effectiveMimeType = FileMimeType.Xlsx;
+        break;
+      case 'ppt':
+        effectiveMimeType = FileMimeType.Ppt;
+        break;
+      case 'pptx':
+        effectiveMimeType = FileMimeType.Pptx;
+        break;
+      // 如果需要，可以添加更多类型
+    }
+  }
+  
+  const blob = new Blob([response.data], {
+    type: effectiveMimeType,
+  });
+
+  return blob;
+}ervice';
+import { UploadFile } from 'antd';
 
 export const transformFile2Base64 = (val: any): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -29,11 +92,11 @@ export const transformFile2Base64 = (val: any): Promise<any> => {
           height = maxSize;
         }
 
-        // Set canvas dimensions to the resized image
+        // Set canvas dimensions
         canvas.width = width;
         canvas.height = height;
 
-        // Draw resized image on canvas
+        // Draw image
         ctx?.drawImage(img, 0, 0, width, height);
 
         // Convert to base64, maintain original format and transparency
@@ -47,65 +110,66 @@ export const transformFile2Base64 = (val: any): Promise<any> => {
   });
 };
 
-export const getFileIcon = (file: UploadFile<any>) => {
-  const name = file.name || '';
-  const regex = /\.(\w+)$/;
-  const extension = file.name && regex.test(name) ? regex.exec(name)![1] : '';
-  return extension;
-};
+export const transformBase64ToFile = (
+  dataUrl: string,
+  filename: string = 'file',
+) => {
+  let arr = dataUrl.split(','),
+    bstr = atob(arr[1]),
+    n = bstr.length,
+    u8arr = new Uint8Array(n);
 
-export const jsonToCSV = (json: any) => {
-  const fields = Object.keys(json[0]);
-  const replacer = () => '';
-  let csv = json.map((row: any) =>
-    fields
-      .map((fieldName) => {
-        return JSON.stringify(row[fieldName], replacer);
-      })
-      .join(','),
-  );
-  csv.unshift(fields.join(','));
-  csv = csv.join('\r\n');
-  return csv;
-};
+  const mime = arr[0].match(/:(.*?);/);
+  const mimeType = mime ? mime[1] : 'image/png';
 
-export const getExtension = (fileName: string) => {
-  if (!fileName || !fileName.includes('.')) {
-    return '';
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
   }
-  return fileName.substring(fileName.lastIndexOf('.') + 1, fileName.length);
+  return new File([u8arr], filename, { type: mimeType });
 };
 
-// Validate file size
-export const validateFile = (file: UploadFile) => {
-  const isLt2M = file.size! / 1024 / 1024 < 2;
-  return isLt2M;
+export const normFile = (e: any) => {
+  if (Array.isArray(e)) {
+    return e;
+  }
+  return e?.fileList;
 };
 
-export const downloadJsonFile = (data: any, filename: string) => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: 'application/json',
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
+export const getUploadFileListFromBase64 = (avatar: string) => {
+  let fileList: UploadFile[] = [];
+
+  if (avatar) {
+    fileList = [{ uid: '1', name: 'file', thumbUrl: avatar, status: 'done' }];
+  }
+
+  return fileList;
 };
 
-async function fetchDocumentBlob(
-  id: string,
-  mimeType?: FileMimeType,
-  filename?: string,
-) {
+export const getBase64FromUploadFileList = async (fileList?: UploadFile[]) => {
+  if (Array.isArray(fileList) && fileList.length > 0) {
+    const file = fileList[0];
+    const originFileObj = file.originFileObj;
+    if (originFileObj) {
+      const base64 = await transformFile2Base64(originFileObj);
+      return base64;
+    } else {
+      return file.thumbUrl;
+    }
+    // return fileList[0].thumbUrl; TODO: Even JPG files will be converted to base64 parameters in png format
+  }
+
+  return '';
+};
+
+async function fetchDocumentBlob(id: string, mimeType?: FileMimeType, filename?: string) {
   const response = await fileManagerService.getDocumentFile({}, id);
-
+  
   // 从文件名获取扩展名
   const fileExt = filename ? filename.split('.').pop()?.toLowerCase() : '';
-
+  
   // 如果没有指定 MIME 类型，尝试从文件扩展名推断
   let effectiveMimeType = mimeType || response.data.type;
-
+  
   // 如果有文件扩展名，检查是否应该使用特定的 MIME 类型
   if (fileExt) {
     switch (fileExt) {
@@ -153,7 +217,7 @@ async function fetchDocumentBlob(
       // 可以添加更多类型
     }
   }
-
+  
   const blob = new Blob([response.data], {
     type: effectiveMimeType,
   });
@@ -194,59 +258,33 @@ export const downloadDocument = async ({
 }) => {
   // 将文件名传递给 fetchDocumentBlob 以便正确处理 MIME 类型
   const blob = await fetchDocumentBlob(id, undefined, filename);
-
+  
   // 确保文件名合法，如果没有提供，则使用默认名称
   let safeFilename = filename;
   if (!safeFilename || safeFilename.trim() === '') {
     safeFilename = `document_${id}.pdf`;
   }
-
+  
   downloadFileFromBlob(blob, safeFilename);
 };
 
 const Units = ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
-export function formatBytes(bytes: number, decimals = 2) {
-  if (bytes === 0) return '0 bytes';
+export const formatBytes = (x: string | number) => {
+  let l = 0,
+    n = (typeof x === 'string' ? parseInt(x, 10) : x) || 0;
 
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + Units[i];
-}
-
-// 此函数用于在表单上传控件中处理文件列表
-export const normFile = (e: any) => {
-  if (Array.isArray(e)) {
-    return e;
+  while (n >= 1024 && ++l) {
+    n = n / 1024;
   }
-  return e?.fileList;
+
+  return n.toFixed(n < 10 && l > 0 ? 1 : 0) + ' ' + Units[l];
 };
 
-// 从Base64字符串创建上传文件列表
-export const getUploadFileListFromBase64 = (avatar: string) => {
-  let fileList: UploadFile[] = [];
-
-  if (avatar) {
-    fileList = [{ uid: '1', name: 'file', thumbUrl: avatar, status: 'done' }];
-  }
-
-  return fileList;
-};
-
-// 从上传文件列表获取Base64字符串
-export const getBase64FromUploadFileList = async (fileList?: UploadFile[]) => {
-  if (Array.isArray(fileList) && fileList.length > 0) {
-    const file = fileList[0];
-    const originFileObj = file.originFileObj;
-    if (originFileObj) {
-      const base64 = await transformFile2Base64(originFileObj);
-      return base64;
-    } else {
-      return file.thumbUrl;
-    }
-  }
-
-  return '';
+export const downloadJsonFile = async (
+  data: Record<string, any>,
+  fileName: string,
+) => {
+  const blob = new Blob([JSON.stringify(data)], { type: FileMimeType.Json });
+  downloadFileFromBlob(blob, fileName);
 };

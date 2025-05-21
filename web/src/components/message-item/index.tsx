@@ -62,9 +62,42 @@ const MessageItem = ({
   const { visible, hideModal, showModal } = useSetModalState();
   const [clickedDocumentId, setClickedDocumentId] = useState('');
 
+  // 增强的引用处理逻辑
+  const effectiveReference = useMemo(() => {
+    // 调试日志
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('MessageItem - reference parameter:', reference);
+      console.log('MessageItem - item.reference:', item.reference);
+    }
+
+    // 优先使用传入的reference参数
+    if (reference?.doc_aggs && reference.doc_aggs.length > 0) {
+      return reference;
+    }
+
+    // 其次使用item自身的reference
+    if (item.reference) {
+      // 处理字符串类型的reference（需要解析）
+      if (typeof item.reference === 'string') {
+        try {
+          const parsedReference = JSON.parse(item.reference);
+          return parsedReference;
+        } catch (error) {
+          console.error('Failed to parse reference:', error);
+        }
+      } else {
+        // 直接返回对象类型的reference
+        return item.reference;
+      }
+    }
+
+    // 默认返回空引用
+    return { doc_aggs: [] };
+  }, [reference, item.reference]);
+
   const referenceDocumentList = useMemo(() => {
-    return reference?.doc_aggs ?? [];
-  }, [reference?.doc_aggs]);
+    return effectiveReference?.doc_aggs ?? [];
+  }, [effectiveReference?.doc_aggs]);
 
   const handleUserDocumentClick = useCallback(
     (id: string) => () => {
@@ -155,7 +188,7 @@ const MessageItem = ({
               <MarkdownContent
                 loading={loading}
                 content={item.content}
-                reference={reference}
+                reference={effectiveReference}
                 clickDocumentButton={clickDocumentButton}
               ></MarkdownContent>
             </div>

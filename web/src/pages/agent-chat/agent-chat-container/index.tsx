@@ -21,6 +21,96 @@ import React, {
 import { v4 as uuid } from 'uuid';
 import styles from './index.less';
 
+// 新添加的引用映射函数
+function mapReferencesToMessages(
+  messages: any[],
+  canvasData: any,
+): Map<string, any> {
+  // 创建一个Map来存储消息ID和对应的引用
+  const messageReferenceMap = new Map<string, any>();
+  console.log('开始映射引用到消息...');
+
+  // 如果没有消息或没有引用，就返回空映射
+  if (!messages || messages.length === 0 || !canvasData || !canvasData.dsl) {
+    console.log('无消息或引用数据，返回空映射');
+    return messageReferenceMap;
+  }
+
+  // 获取所有非欢迎消息（通常是用户和助手的交互消息）
+  const nonWelcomeMessages = messages.filter(
+    (msg: any) =>
+      msg.role === MessageType.Assistant &&
+      !msg.content.includes('欢迎') &&
+      !msg.content.includes('Welcome'),
+  );
+  console.log(`找到 ${nonWelcomeMessages.length} 条非欢迎消息`);
+
+  // 从Canvas数据中提取引用
+  const canvasReferences = canvasData.dsl.references || [];
+  console.log(`找到 ${canvasReferences.length} 条引用`);
+
+  if (nonWelcomeMessages.length === 0 || canvasReferences.length === 0) {
+    console.log('没有需要映射的消息或引用');
+    return messageReferenceMap;
+  }
+
+  // 不同情况的处理策略
+  if (canvasReferences.length === nonWelcomeMessages.length) {
+    // 情况1：引用数量与非欢迎消息数量相同，一对一映射
+    console.log('情况1：引用与消息数量相同，一对一映射');
+    nonWelcomeMessages.forEach((msg: any, idx: number) => {
+      messageReferenceMap.set(msg.id, canvasReferences[idx]);
+    });
+  } else if (canvasReferences.length > nonWelcomeMessages.length) {
+    // 情况2：引用数量多于消息数量，需要智能映射
+    console.log('情况2：引用数量多于消息数量，执行智能映射');
+    // 简单策略：将多余的引用附加到最后一条消息
+    nonWelcomeMessages.forEach((msg: any, idx: number) => {
+      if (idx < nonWelcomeMessages.length - 1) {
+        // 除最后一条消息外，一对一映射
+        messageReferenceMap.set(msg.id, canvasReferences[idx]);
+      } else {
+        // 最后一条消息获取剩余所有引用
+        const remainingRefs = canvasReferences.slice(idx);
+        // 合并引用
+        const combinedRef = remainingRefs.reduce((combined: any, ref: any) => {
+          if (combined.doc_aggs) {
+            combined.doc_aggs = [
+              ...(combined.doc_aggs || []),
+              ...(ref.doc_aggs || []),
+            ];
+          } else {
+            combined = ref;
+          }
+          return combined;
+        }, {});
+        messageReferenceMap.set(msg.id, combinedRef);
+      }
+    });
+  } else if (canvasReferences.length === 1 && nonWelcomeMessages.length > 0) {
+    // 情况3：单一引用对应多个消息，将引用附加到最后一条消息
+    console.log('情况3：单一引用，附加到最后一条消息');
+    const lastMsg = nonWelcomeMessages[nonWelcomeMessages.length - 1];
+    messageReferenceMap.set(lastMsg.id, canvasReferences[0]);
+  } else {
+    // 情况4：引用数量少于消息数量，从末尾开始映射
+    console.log('情况4：引用数量少于消息数量，从末尾开始映射');
+    const startIdx = Math.max(
+      0,
+      nonWelcomeMessages.length - canvasReferences.length,
+    );
+    for (let i = 0; i < canvasReferences.length; i++) {
+      messageReferenceMap.set(
+        nonWelcomeMessages[startIdx + i].id,
+        canvasReferences[i],
+      );
+    }
+  }
+
+  console.log(`成功映射 ${messageReferenceMap.size} 个引用到消息`);
+  return messageReferenceMap;
+}
+
 interface IProps {
   controller: AbortController;
   conversationId: string | null;
@@ -42,6 +132,10 @@ const AgentChatContainer = ({
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
   >(conversationId);
+  // 新增引用映射状态
+  const [messageReferenceMap, setMessageReferenceMap] = useState<
+    Map<string, any>
+  >(new Map());
 
   const {
     send,
@@ -85,6 +179,13 @@ const AgentChatContainer = ({
             const canvasMessages = data.data.dsl?.messages || [];
             const processedMessages = buildMessageListWithUuid(canvasMessages);
             setMessages(processedMessages);
+
+            // 更新引用映射
+            const newMessageReferenceMap = mapReferencesToMessages(
+              processedMessages,
+              data.data,
+            );
+            setMessageReferenceMap(newMessageReferenceMap);
           } else if (data && (data.code === 102 || data.code === 404)) {
             console.warn(`对话不存在: ${conversationId}`);
             setMessages([]);
@@ -312,7 +413,11 @@ const AgentChatContainer = ({
                       sendLoading={
                         sendLoading && messages.length - 1 === i && !done
                       }
-                      reference={message.reference || []}
+                      reference={
+                        messageReferenceMap.has(message.id)
+                          ? messageReferenceMap.get(message.id)
+                          : message.reference || []
+                      }
                     />
                   ))}
                 </div>
