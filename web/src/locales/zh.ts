@@ -293,7 +293,7 @@ export default {
       fileTypeLaws: '条款',
       fileTypePresentation: '演示',
       fileTypePicture: '图片',
-      fileTypeOne: '单一文档',
+      fileTypeOne: '小文档',
       fileTypeAudio: '音频',
       fileTypeEmail: '邮件',
       fileTypeTag: '标签',
