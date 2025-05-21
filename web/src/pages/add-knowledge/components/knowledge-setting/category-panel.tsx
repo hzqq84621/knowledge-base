@@ -1,7 +1,7 @@
 import SvgIcon from '@/components/svg-icon';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useSelectParserList } from '@/hooks/user-setting-hooks';
-import { Col, Divider, Empty, Row, Typography } from 'antd';
+import { Col, Empty, Row, Typography } from 'antd';
 import DOMPurify from 'dompurify';
 import camelCase from 'lodash/camelCase';
 import { useMemo } from 'react';
@@ -18,8 +18,11 @@ const CategoryPanel = ({ chunkMethod }: { chunkMethod: string }) => {
   const item = useMemo(() => {
     const item = parserList.find((x) => x.value === chunkMethod);
     if (item) {
+      // 使用本地化翻译，如果没有找到对应的翻译则使用原始标签
+      const fileTypeKey = `fileType${item.value.charAt(0).toUpperCase() + item.value.slice(1)}`;
       return {
-        title: item.label,
+        // 优先使用翻译后的文件类型名称
+        title: t(fileTypeKey) || item.label,
         description: t(camelCase(item.value)),
       };
     }
@@ -58,10 +61,7 @@ const CategoryPanel = ({ chunkMethod }: { chunkMethod: string }) => {
               </Col>
             ))}
           </Row>
-          <h5 className="font-semibold text-base mt-4 mb-1">
-            {item.title} {t('dialogueExamplesTitle')}
-          </h5>
-          <Divider></Divider>
+          {/* 已删除对话示例标题 */}
         </>
       ) : (
         <Empty description={''} image={null}>

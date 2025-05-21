@@ -26,7 +26,6 @@ import {
 import { AudioConfiguration } from './audio';
 import { BookConfiguration } from './book';
 import { EmailConfiguration } from './email';
-import { KnowledgeGraphConfiguration } from './knowledge-graph';
 import { LawsConfiguration } from './laws';
 import { ManualConfiguration } from './manual';
 import { NaiveConfiguration } from './naive';
@@ -57,7 +56,7 @@ const ConfigurationComponentMap = {
   [DocumentParserType.Audio]: AudioConfiguration, // 音频文档配置
   [DocumentParserType.Email]: EmailConfiguration, // 邮件文档配置
   [DocumentParserType.Tag]: TagConfiguration, // 标签文档配置
-  [DocumentParserType.KnowledgeGraph]: KnowledgeGraphConfiguration, // 知识图谱文档配置
+  //[DocumentParserType.KnowledgeGraph]: KnowledgeGraphConfiguration, // 知识图谱文档配置
 };
 
 // 空组件，当没有选择解析器类型时显示
@@ -84,16 +83,37 @@ export const ConfigurationForm = ({ form }: { form: FormInstance }) => {
   // 监听权限变化
   const permission = Form.useWatch('permission', form);
 
-  // 获取切片方法选项
+  // 获取文件类型选项
   const chunkMethodOptions = useMemo(() => {
-    return Object.values(DocumentParserType).map((value) => ({
-      label:
-        value === DocumentParserType.KnowledgeGraph
-          ? 'Knowledge Graph'
-          : value.charAt(0).toUpperCase() + value.slice(1),
-      value: value,
-    }));
-  }, []);
+    // 定义要隐藏的文件类型列表
+    const hiddenTypes = [
+      // 在这里添加您想要隐藏的类型
+      DocumentParserType.KnowledgeGraph, // 知识图谱文档配置
+      DocumentParserType.Audio, // 音频类型
+      DocumentParserType.Email, // 邮件类型
+      DocumentParserType.Tag, // 标签类型
+      // 您可以根据需要添加或移除类型
+    ];
+
+    return (
+      Object.values(DocumentParserType)
+        // 过滤掉不想显示的类型
+        .filter((value) => !hiddenTypes.includes(value))
+        .map((value) => {
+          // 将枚举值转换为对应的本地化key
+          const key = `fileType${value.charAt(0).toUpperCase() + value.slice(1)}`;
+          return {
+            // 使用本地化翻译，如果没有找到对应的翻译则使用原始值首字母大写
+            label:
+              t(key) ||
+              (value === DocumentParserType.KnowledgeGraph
+                ? 'Knowledge Graph'
+                : value.charAt(0).toUpperCase() + value.slice(1)),
+            value: value,
+          };
+        })
+    );
+  }, [t]);
 
   // 根据解析器ID动态获取对应的配置组件
   const ConfigurationComponent = useMemo(() => {

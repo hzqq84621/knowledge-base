@@ -145,12 +145,13 @@ export default {
       webCrawl: '网页抓取',
       chunkNumber: '分块数',
       uploadDate: '上传日期',
-      chunkMethod: '切片方法',
+      chunkMethod: '文件类型',
       enabled: '启用',
       disabled: '禁用',
       action: '动作',
       parsingStatus: '解析状态',
-      parsingStatusTip: '文本解析的时间取决于诸多因素。如果开启了知识图谱、RAPTOR、自动问题提取、自动关键词提取等功能，时间会更长。如果解析进度条长时间不更新，也可以参考这两条 FAQ：https://ragflow.io/docs/dev/faq#why-does-my-document-parsing-stall-at-under-one-percent。',
+      parsingStatusTip:
+        '文本解析的时间取决于诸多因素。如果开启了知识图谱、RAPTOR、自动问题提取、自动关键词提取等功能，时间会更长。如果解析进度条长时间不更新，也可以参考这两条 FAQ：https://ragflow.io/docs/dev/faq#why-does-my-document-parsing-stall-at-under-one-percent。',
       processBeginAt: '开始于',
       processDuration: '持续时间',
       progressMsg: '进度',
@@ -211,7 +212,7 @@ export default {
       delimiterTip:
         '支持多字符作为分隔符，多字符用两个反引号 \\`\\` 分隔符包裹。若配置成：\\n`##`; 系统将首先使用换行符、两个#号以及分号先对文本进行分割，随后再对分得的小文本块按照「建议文本块大小」设定的大小进行拼装。在设置文本分段标识符前请确保理解上述文本分段切片机制。',
       html4excel: '表格转HTML',
-      html4excelTip: `与 General 切片方法配合使用。未开启状态下，表格文件（XLSX、XLS（Excel97~2003））会按行解析为键值对。开启后，表格文件会被解析为 HTML 表格。若原始表格超过 12 行，系统会自动按每 12 行拆分为多个 HTML 表格。`,
+      html4excelTip: `与 General 文件类型配合使用。未开启状态下，表格文件（XLSX、XLS（Excel97~2003））会按行解析为键值对。开启后，表格文件会被解析为 HTML 表格。若原始表格超过 12 行，系统会自动按每 12 行拆分为多个 HTML 表格。`,
       autoKeywords: '自动关键词提取',
       autoKeywordsTip: `自动为每个文本块中提取 N 个关键词，用以提升查询精度。请注意：该功能采用“系统模型设置”中设置的默认聊天模型提取关键词，因此也会产生更多 Token 消耗。另外，你也可以手动更新生成的关键词。`,
       autoQuestions: '自动问题提取',
@@ -246,7 +247,7 @@ export default {
       theDocumentBeingParsedCannotBeDeleted: '正在解析的文档不能被删除',
     },
     knowledgeConfiguration: {
-      titleDescription: '在这里更新您的知识库详细信息，尤其是切片方法。',
+      titleDescription: '在这里更新您的知识库详细信息，尤其是文件类型。',
       name: '知识库名称',
       photo: '知识库图片',
       description: '描述',
@@ -263,7 +264,7 @@ export default {
         '如果把知识库权限设为“团队”，则所有团队成员都可以操作该知识库。',
       chunkTokenNumberTip:
         '建议的生成文本块的 token 数阈值。如果切分得到的小文本段 token 数达不到这一阈值就会不断与之后的文本段合并，直至再合并下一个文本段会超过这一阈值为止，此时产生一个最终文本块。如果系统在切分文本段时始终没有遇到文本分段标识符，即便文本段 token 数已经超过这一阈值，系统也不会生成新文本块。',
-      chunkMethod: '切片方法',
+      chunkMethod: '文件类型',
       chunkMethodTip: '说明位于右侧。',
       upload: '上传',
       english: '英文',
@@ -280,7 +281,25 @@ export default {
       dialogueExamplesTitle: '对话示例',
       methodEmpty: '这将显示知识库类别的可视化解释',
       advancedSettings: '参数配置',
-      book: `<p><b>支持格式：</b>DOCX、PDF、TXT</p>
+
+      // 文件类型选项翻译
+      fileTypeNaive: '通用',
+      fileTypeQa: '问答',
+      fileTypeResume: '简历',
+      fileTypeManual: '手册',
+      fileTypeTable: '表格',
+      fileTypePaper: '论文',
+      fileTypeBook: '书籍',
+      fileTypeLaws: '条款',
+      fileTypePresentation: '演示',
+      fileTypePicture: '图片',
+      fileTypeOne: '单一文档',
+      fileTypeAudio: '音频',
+      fileTypeEmail: '邮件',
+      fileTypeTag: '标签',
+      fileTypeKnowledgeGraph: '知识图谱',
+
+      Book: `<p><b>支持格式：</b>DOCX、PDF、TXT</p>
       <p><b>适用场景：</b></p><p>
       适用于多章节设备手册，建议为PDF文件设置<i>页码范围</i>（如第5-30页）以聚焦核心内容。</p>`,
 
