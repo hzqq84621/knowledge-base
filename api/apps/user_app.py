@@ -709,7 +709,7 @@ def user_add():
         "model_type": "chat",
         "llm_name": "QwQ-32B",   
         "api_base": "http://192.168.110.214:8000/v1",
-        "api_key": "",
+        "api_key": "x",
         "max_tokens": 10000
     }
     def add_llm(llm_param):
@@ -801,6 +801,7 @@ def user_add():
                 model_name=mdl_nm,
                 base_url=llm["api_base"]
             )
+            '''
             try:
                 m, tc = mdl.chat(None, [{"role": "user", "content": "Hello! How are you doing!"}], {
                     "temperature": 0.9})
@@ -809,6 +810,7 @@ def user_add():
             except Exception as e:
                 msg += f"\nFail to access model({mdl_nm})." + str(
                     e)
+            '''
         elif llm["model_type"] == LLMType.RERANK:
             assert factory in RerankModel, f"RE-rank model from {factory} is not supported yet."
             try:
@@ -857,7 +859,7 @@ def user_add():
             return msg
 
         if not TenantLLMService.filter_update(
-                [TenantLLM.tenant_id == current_user.id, TenantLLM.llm_factory == factory,
+                [TenantLLM.tenant_id ==user_id, TenantLLM.llm_factory == factory,
                 TenantLLM.llm_name == llm["llm_name"]], llm):
             TenantLLMService.save(**llm)
 
