@@ -38,7 +38,7 @@
           "inputs": [],
           "output": null,
           "params": {
-            "cite": false,
+            "cite": true,
             "debug_inputs": [],
             "frequency_penalty": 0.7,
             "inputs": [],

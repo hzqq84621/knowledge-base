@@ -34,8 +34,27 @@
   padding: 0;
 }
 
-.referenceIcon {
-  padding: 0 6px;
+.referenceBubble {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  background-color: #1890ff;
+  color: white;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  margin: 0 2px;
+  padding: 0 4px;
+  cursor: pointer;
+  vertical-align: middle;
+
+  &:hover {
+    background-color: #40a9ff;
+    transform: scale(1.1);
+    transition: all 0.2s ease;
+  }
 }
 
 .cursor {

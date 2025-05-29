@@ -13,7 +13,9 @@ import { IRegenerateMessage, IRemoveMessageById } from '@/hooks/logic-hooks';
 import { IMessage } from '@/pages/chat/interface';
 import MarkdownContent from '@/pages/chat/markdown-content';
 import { getExtension, isImage } from '@/utils/document-util';
-import { Avatar, Button, Flex, List, Typography } from 'antd';
+import { downloadDocument } from '@/utils/file-util';
+import { DownloadOutlined } from '@ant-design/icons';
+import { Avatar, Button, Flex, List, Typography, message } from 'antd';
 import FileIcon from '../file-icon';
 import IndentedTreeModal from '../indented-tree/modal';
 import NewDocumentLink from '../new-document-link';
@@ -99,6 +101,20 @@ const MessageItem = ({
     return effectiveReference?.doc_aggs ?? [];
   }, [effectiveReference?.doc_aggs]);
 
+  // 处理文档下载
+  const handleDownloadDocument = useCallback(
+    async (docId: string, docName: string) => {
+      try {
+        await downloadDocument({ id: docId, filename: docName });
+        message.success(`文档 "${docName}" 下载完成`);
+      } catch (error) {
+        message.error(`下载文档 "${docName}" 失败`);
+        console.error('Download error:', error);
+      }
+    },
+    [],
+  );
+
   const handleUserDocumentClick = useCallback(
     (id: string) => () => {
       setClickedDocumentId(id);
@@ -173,23 +189,45 @@ const MessageItem = ({
               <List
                 bordered
                 dataSource={referenceDocumentList}
-                renderItem={(refItem) => {
+                renderItem={(refItem: any) => {
                   return (
                     <List.Item>
-                      <Flex gap={'small'} align="center">
-                        <FileIcon
-                          id={refItem.doc_id}
-                          name={refItem.doc_name}
-                        ></FileIcon>
+                      <Flex
+                        gap={'small'}
+                        align="center"
+                        justify="space-between"
+                        style={{ width: '100%' }}
+                      >
+                        <Flex gap={'small'} align="center">
+                          <FileIcon
+                            id={refItem.doc_id}
+                            name={refItem.doc_name}
+                          ></FileIcon>
 
-                        <NewDocumentLink
-                          documentId={refItem.doc_id}
-                          documentName={refItem.doc_name}
-                          prefix="document"
-                          link={refItem.url}
+                          <NewDocumentLink
+                            documentId={refItem.doc_id}
+                            documentName={refItem.doc_name}
+                            prefix="document"
+                            link={refItem.url}
+                          >
+                            {refItem.doc_name}
+                          </NewDocumentLink>
+                        </Flex>
+
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<DownloadOutlined />}
+                          onClick={() =>
+                            handleDownloadDocument(
+                              refItem.doc_id,
+                              refItem.doc_name,
+                            )
+                          }
+                          title={`下载 ${refItem.doc_name}`}
                         >
-                          {refItem.doc_name}
-                        </NewDocumentLink>
+                          下载
+                        </Button>
                       </Flex>
                     </List.Item>
                   );

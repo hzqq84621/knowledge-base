@@ -2,7 +2,6 @@ import Image from '@/components/image';
 import SvgIcon from '@/components/svg-icon';
 import { IReference, IReferenceChunk } from '@/interfaces/database/chat';
 import { getExtension } from '@/utils/document-util';
-import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, Flex, Popover } from 'antd';
 import DOMPurify from 'dompurify';
 import React, { useCallback, useEffect, useMemo } from 'react';
@@ -174,8 +173,13 @@ const MarkdownContent = ({
       let replacedText = reactStringReplace(text, reg, (match, i) => {
         const chunkIndex = getChunkIndex(match);
         return (
-          <Popover content={getPopoverContent(chunkIndex)} key={i}>
-            <InfoCircleOutlined className={styles.referenceIcon} />
+          <Popover
+            content={getPopoverContent(chunkIndex)}
+            key={i}
+            title="引用内容"
+            placement="top"
+          >
+            <span className={styles.referenceBubble}>{chunkIndex + 1}</span>
           </Popover>
         );
       });
