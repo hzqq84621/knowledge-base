@@ -28,7 +28,7 @@ function mapReferencesToMessages(
 ): Map<string, any> {
   const messageReferenceMap = new Map<string, any>();
 
-  // 如果没有消息或没有引用，就返回空映射
+  // 如果没有消息或没有DSL数据，就返回空映射
   if (!messages || messages.length === 0 || !canvasData || !canvasData.dsl) {
     console.log('mapReferencesToMessages: No messages or canvas data', {
       hasMessages: !!messages && messages.length > 0,
@@ -38,11 +38,95 @@ function mapReferencesToMessages(
     return messageReferenceMap;
   }
 
-  // 从Canvas数据中提取引用 - 适配新的引用结构
+  console.log('mapReferencesToMessages: Processing messages with references', {
+    messagesCount: messages.length,
+  });
+
+  // 首先尝试从消息中直接获取引用（新格式，reference直接在message内）
+  let hasReferencesInMessages = false;
+
+  messages.forEach((message: any) => {
+    // 处理消息中的引用字段
+    if (message && message.id) {
+      let msgReference = null;
+
+      // 处理不同格式的引用数据
+      if (message.reference) {
+        // 如果引用已经是数组
+        if (Array.isArray(message.reference) && message.reference.length > 0) {
+          msgReference = message.reference;
+          console.log(`Found array reference in message ${message.id}:`, {
+            length: message.reference.length,
+          });
+        }
+        // 如果引用是对象，但不是数组
+        else if (typeof message.reference === 'object') {
+          // 如果对象有doc_aggs字段
+          if (message.reference.doc_aggs) {
+            msgReference = message.reference.doc_aggs;
+            console.log(
+              `Found doc_aggs object reference in message ${message.id}:`,
+              {
+                length: message.reference.doc_aggs.length,
+              },
+            );
+          }
+          // 如果是单个引用对象
+          else {
+            msgReference = [message.reference];
+            console.log(
+              `Found single object reference in message ${message.id}, converted to array`,
+            );
+          }
+        }
+        // 如果引用是字符串类型
+        else if (typeof message.reference === 'string') {
+          try {
+            const parsedRef = JSON.parse(message.reference);
+            if (Array.isArray(parsedRef)) {
+              msgReference = parsedRef;
+            } else if (parsedRef.doc_aggs) {
+              msgReference = parsedRef.doc_aggs;
+            } else {
+              msgReference = [parsedRef];
+            }
+            console.log(`Parsed string reference in message ${message.id}:`, {
+              type: Array.isArray(msgReference) ? 'array' : typeof msgReference,
+              length: Array.isArray(msgReference) ? msgReference.length : 'n/a',
+            });
+          } catch (e) {
+            console.error(
+              `Failed to parse reference string in message ${message.id}:`,
+              e,
+            );
+          }
+        }
+      }
+
+      // 如果成功提取了引用数据，保存到映射中
+      if (msgReference && msgReference.length > 0) {
+        messageReferenceMap.set(message.id, msgReference);
+        hasReferencesInMessages = true;
+        console.log(`Mapped reference to message ${message.id}:`, {
+          referenceCount: msgReference.length,
+        });
+      }
+    }
+  });
+
+  // 如果在消息中找到了引用，直接返回映射
+  if (hasReferencesInMessages) {
+    console.log('Successfully mapped references from messages', {
+      totalMappings: messageReferenceMap.size,
+      messageIds: Array.from(messageReferenceMap.keys()),
+    });
+    return messageReferenceMap;
+  }
+
+  // 如果消息中没有引用，尝试从DSL的reference字段中获取（旧格式）
   const canvasReferences = canvasData.dsl.reference || [];
 
-  console.log('mapReferencesToMessages: Processing references', {
-    messagesCount: messages.length,
+  console.log('Falling back to DSL references', {
     referencesCount: canvasReferences.length,
     referencesStructure: canvasReferences.slice(0, 2), // 显示前2个引用的结构
   });
@@ -51,12 +135,30 @@ function mapReferencesToMessages(
     return messageReferenceMap;
   }
 
+  // 收集没有message_id的直接引用数据
+  const directReferences: any[] = [];
+
   // 处理新的引用结构：{message_id: string, references: any}
   canvasReferences.forEach((refItem: any, index: number) => {
+    // 情况1: 有正确的message_id和references字段
     if (refItem.message_id && refItem.references) {
       // 直接根据message_id映射引用
       messageReferenceMap.set(refItem.message_id, refItem.references);
       console.log(`Mapped reference ${index} to message ${refItem.message_id}`);
+    }
+    // 情况2: 直接是包含doc_aggs的引用数据对象
+    else if (
+      refItem.doc_aggs &&
+      Array.isArray(refItem.doc_aggs) &&
+      refItem.doc_aggs.length > 0
+    ) {
+      // 记录找到了直接的引用数据
+      console.log(`Found direct reference with doc_aggs at index ${index}:`, {
+        docCount: refItem.doc_aggs.length,
+      });
+
+      // 将这些引用收集起来，后面统一处理
+      directReferences.push(refItem);
     } else {
       console.log(
         `Reference ${index} missing message_id or references:`,
@@ -64,6 +166,60 @@ function mapReferencesToMessages(
       );
     }
   });
+
+  // 处理直接收集的引用数据
+  if (directReferences.length > 0) {
+    console.log(
+      `Processing ${directReferences.length} direct references without message_id`,
+    );
+
+    // 获取所有助手消息，排除欢迎消息
+    const assistantMessages = messages.filter(
+      (msg) =>
+        msg.role === MessageType.Assistant &&
+        !msg.content.includes('欢迎') &&
+        !msg.content.includes('Welcome'),
+    );
+
+    if (assistantMessages.length > 0) {
+      console.log(
+        `Found ${assistantMessages.length} assistant messages to map references to`,
+      );
+
+      // 如果直接引用数量少于或等于助手消息数量，按顺序分配
+      if (directReferences.length <= assistantMessages.length) {
+        // 从最近的消息开始映射（假设最新的引用对应最新的消息）
+        const startIdx = Math.max(
+          0,
+          assistantMessages.length - directReferences.length,
+        );
+
+        for (let i = 0; i < directReferences.length; i++) {
+          const targetMsg = assistantMessages[startIdx + i];
+          if (targetMsg && targetMsg.id) {
+            messageReferenceMap.set(targetMsg.id, directReferences[i].doc_aggs);
+            console.log(
+              `Mapped direct reference ${i} to assistant message ${targetMsg.id}`,
+            );
+          }
+        }
+      }
+      // 如果引用数量多于消息数量，将所有引用合并分配给最后一条消息
+      else {
+        const lastMsg = assistantMessages[assistantMessages.length - 1];
+
+        // 合并所有引用的doc_aggs
+        const allDocAggs = directReferences.reduce((acc, ref) => {
+          return [...acc, ...(ref.doc_aggs || [])];
+        }, []);
+
+        console.log(
+          `Mapped ${allDocAggs.length} combined references to last message ${lastMsg.id}`,
+        );
+        messageReferenceMap.set(lastMsg.id, allDocAggs);
+      }
+    }
+  }
 
   // 如果新结构没有数据，回退到旧的映射逻辑（兼容性处理）
   if (messageReferenceMap.size === 0) {
@@ -250,10 +406,42 @@ const AgentChatContainer = ({
                 ...data.data,
                 dsl: dsl,
               };
+              // 添加更多详细的日志，以便于检查消息和引用的结构
+              console.log(
+                'Processed messages before mapping:',
+                processedMessages.map((msg) => ({
+                  id: msg.id,
+                  role: msg.role,
+                  hasReference: !!msg.reference,
+                  referenceType: msg.reference
+                    ? Array.isArray(msg.reference)
+                      ? 'array'
+                      : typeof msg.reference
+                    : 'none',
+                })),
+              );
+
               const newMessageReferenceMap = mapReferencesToMessages(
                 processedMessages,
                 canvasDataWithParsedDsl,
               );
+
+              // 详细输出映射结果，便于调试
+              console.log(
+                'Reference mapping details:',
+                Array.from(newMessageReferenceMap.entries()).map(
+                  ([msgId, ref]) => ({
+                    messageId: msgId,
+                    referenceType: Array.isArray(ref) ? 'array' : typeof ref,
+                    referenceCount: Array.isArray(ref)
+                      ? ref.length
+                      : ref && typeof ref === 'object' && ref.doc_aggs
+                        ? ref.doc_aggs.length
+                        : 0,
+                  }),
+                ),
+              );
+
               setMessageReferenceMap(newMessageReferenceMap);
 
               console.log('Canvas data loaded:', {
@@ -362,9 +550,14 @@ const AgentChatContainer = ({
       if (responseData.answer && !responseData.running_status) {
         answerContent = responseData.answer;
         answerReference = responseData.reference || [];
+        console.log('Received answer with reference:', answerReference);
       } else if (answerObj.answer && !answerObj.running_status) {
         answerContent = answerObj.answer;
         answerReference = answerObj.reference || [];
+        console.log(
+          'Received answer with reference from answerObj:',
+          answerReference,
+        );
       }
 
       if (answerContent) {
@@ -445,6 +638,11 @@ const AgentChatContainer = ({
                           messageReferenceMap.has(message.id)
                             ? messageReferenceMap.get(message.id)
                             : message.reference || []
+                        }
+                        // 添加调试信息，帮助排查引用数据
+                        data-has-reference={
+                          !!message.reference ||
+                          messageReferenceMap.has(message.id)
                         }
                       />
                     );

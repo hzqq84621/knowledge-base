@@ -65,30 +65,132 @@ const MessageItem = ({
 
   // 引用处理逻辑
   const effectiveReference = useMemo(() => {
-    // 优先使用传入的reference参数
-    if (reference?.doc_aggs && reference.doc_aggs.length > 0) {
+    console.log(`[MessageItem] Processing reference for message ${item.id}:`, {
+      incomingReference: reference,
+      messageReference: item.reference,
+      referenceType: reference
+        ? Array.isArray(reference)
+          ? 'array'
+          : typeof reference
+        : 'none',
+      messageReferenceType: item.reference
+        ? Array.isArray(item.reference)
+          ? 'array'
+          : typeof item.reference
+        : 'none',
+    });
+
+    // 按优先级处理引用数据
+
+    // 1. 优先使用外部传入的reference参数(已格式化为doc_aggs对象)
+    if (
+      reference?.doc_aggs &&
+      Array.isArray(reference.doc_aggs) &&
+      reference.doc_aggs.length > 0
+    ) {
+      console.log(
+        `[MessageItem] Using incoming reference with doc_aggs for message ${item.id}:`,
+        reference.doc_aggs.length,
+      );
       return reference;
     }
 
-    // 其次使用item自身的reference
-    if (item.reference) {
-      // 处理字符串类型的reference（需要解析）
-      if (typeof item.reference === 'string') {
-        try {
-          const parsedReference = JSON.parse(item.reference);
-          return parsedReference;
-        } catch (error) {
-          console.error('Failed to parse reference:', error);
+    // 2. 处理外部传入的数组形式reference
+    if (Array.isArray(reference) && reference.length > 0) {
+      // 检查数组中的第一个元素，判断是否需要进一步处理
+      if (reference.length > 0 && reference[0]) {
+        // 如果数组元素中直接包含doc_id或doc_name等字段，说明直接是文档引用
+        if (reference[0].doc_id || reference[0].doc_name) {
+          console.log(
+            `[MessageItem] Using incoming array of document references for message ${item.id}:`,
+            reference.length,
+          );
+          return { doc_aggs: reference };
         }
-      } else {
-        // 直接返回对象类型的reference
+        // 如果数组元素中包含doc_aggs字段，需要提取所有doc_aggs合并
+        else if (
+          reference[0].doc_aggs &&
+          Array.isArray(reference[0].doc_aggs)
+        ) {
+          const allDocAggs = reference.reduce((acc, ref) => {
+            return [...acc, ...(ref.doc_aggs || [])];
+          }, []);
+          console.log(
+            `[MessageItem] Extracted and combined ${allDocAggs.length} doc_aggs from array references for message ${item.id}`,
+          );
+          return { doc_aggs: allDocAggs };
+        }
+      }
+
+      console.log(
+        `[MessageItem] Converting incoming array reference for message ${item.id}:`,
+        reference.length,
+      );
+      return { doc_aggs: reference };
+    }
+
+    // 3. 处理消息自身的数组形式reference (新格式)
+    if (Array.isArray(item.reference) && item.reference.length > 0) {
+      console.log(
+        `[MessageItem] Using message's own array reference for message ${item.id}:`,
+        item.reference.length,
+      );
+      return { doc_aggs: item.reference };
+    }
+
+    // 4. 处理消息自身的对象形式reference
+    if (
+      item.reference &&
+      typeof item.reference === 'object' &&
+      !Array.isArray(item.reference)
+    ) {
+      // 如果已经有doc_aggs格式，直接使用
+      if (item.reference.doc_aggs) {
+        console.log(
+          `[MessageItem] Using message's own doc_aggs reference for message ${item.id}:`,
+          item.reference.doc_aggs.length,
+        );
         return item.reference;
+      }
+
+      // 如果是单个文档对象，转换为数组格式
+      console.log(
+        `[MessageItem] Converting single document reference for message ${item.id}:`,
+        item.reference,
+      );
+      return { doc_aggs: [item.reference] };
+    }
+
+    // 5. 处理字符串类型的reference（需要解析）
+    if (item.reference && typeof item.reference === 'string') {
+      try {
+        const parsedReference = JSON.parse(item.reference);
+        console.log(
+          `[MessageItem] Parsed string reference for message ${item.id}:`,
+          parsedReference,
+        );
+
+        if (Array.isArray(parsedReference)) {
+          return { doc_aggs: parsedReference };
+        } else if (parsedReference.doc_aggs) {
+          return parsedReference;
+        } else if (parsedReference) {
+          return { doc_aggs: [parsedReference] };
+        }
+      } catch (error) {
+        console.error(
+          `[MessageItem] Failed to parse reference for message ${item.id}:`,
+          error,
+        );
       }
     }
 
     // 默认返回空引用
+    console.log(
+      `[MessageItem] No valid reference found for message ${item.id}, using empty array`,
+    );
     return { doc_aggs: [] };
-  }, [reference, item.reference]);
+  }, [reference, item.reference, item.id]);
 
   // 检查消息内容是否存在
   if (!item || !item.content) {
@@ -98,8 +200,16 @@ const MessageItem = ({
   }
 
   const referenceDocumentList = useMemo(() => {
-    return effectiveReference?.doc_aggs ?? [];
-  }, [effectiveReference?.doc_aggs]);
+    const docs = effectiveReference?.doc_aggs ?? [];
+    console.log(
+      `[MessageItem] Final reference document list for message ${item.id}:`,
+      {
+        count: docs.length,
+        sample: docs.length > 0 ? docs[0] : 'none',
+      },
+    );
+    return docs;
+  }, [effectiveReference?.doc_aggs, item.id]);
 
   // 处理文档下载
   const handleDownloadDocument = useCallback(

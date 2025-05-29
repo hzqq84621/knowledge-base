@@ -1,0 +1,36 @@
+2025-05-29 14:03:56,060 INFO     93027 ragflow_server log path: /Users/bj/knowledge-base/logs/ragflow_server.log, log levels: {'peewee': 'WARNING', 'pdfminer': 'WARNING', 'root': 'INFO'}
+2025-05-29 14:03:56,698 INFO     93027 found 0 gpus
+2025-05-29 14:03:57,807 INFO     93027 init database on cluster mode successfully
+2025-05-29 14:03:58,635 INFO     93027 load_model /Users/bj/knowledge-base/rag/res/deepdoc/det.onnx uses CPU
+2025-05-29 14:03:58,662 INFO     93027 load_model /Users/bj/knowledge-base/rag/res/deepdoc/rec.onnx uses CPU
+2025-05-29 14:04:00,781 INFO     93027 
+        ____   ___    ______ ______ __               
+       / __ \ /   |  / ____// ____// /____  _      __
+      / /_/ // /| | / / __ / /_   / // __ \| | /| / /
+     / _, _// ___ |/ /_/ // __/  / // /_/ /| |/ |/ / 
+    /_/ |_|/_/  |_|\____//_/    /_/ \____/ |__/|__/                             
+
+    
+2025-05-29 14:04:00,821 INFO     93027 RAGFlow version: 8731d765 full
+2025-05-29 14:04:00,821 INFO     93027 project base: /Users/bj/knowledge-base
+2025-05-29 14:04:00,821 INFO     93027 Current configs, from /Users/bj/knowledge-base/conf/service_conf.yaml:
+	ragflow: {'host': '0.0.0.0', 'http_port': 9380}
+	mysql: {'name': 'rag_flow', 'user': 'root', 'password': '********', 'host': 'localhost', 'port': 5455, 'max_connections': 100, 'stale_timeout': 30}
+	minio: {'user': 'rag_flow', 'password': '********', 'host': 'localhost:9000'}
+	es: {'hosts': 'http://localhost:1200', 'username': 'elastic', 'password': '********'}
+	os: {'hosts': 'http://localhost:1201', 'username': 'admin', 'password': '********'}
+	infinity: {'uri': 'localhost:23817', 'db_name': 'default_db'}
+	redis: {'db': 1, 'password': '********', 'host': 'localhost:6379'}
+2025-05-29 14:04:00,822 INFO     93027 Use Elasticsearch http://localhost:1200 as the doc engine.
+2025-05-29 14:04:00,914 INFO     93027 GET http://localhost:1200/ [status:200 duration:0.091s]
+2025-05-29 14:04:00,915 INFO     93027 HEAD http://localhost:1200/ [status:200 duration:0.001s]
+2025-05-29 14:04:00,915 INFO     93027 Elasticsearch http://localhost:1200 is healthy.
+2025-05-29 14:04:00,918 WARNING  93027 Load term.freq FAIL!
+2025-05-29 14:04:00,919 WARNING  93027 Realtime synonym is disabled, since no redis connection.
+2025-05-29 14:04:00,921 WARNING  93027 Load term.freq FAIL!
+2025-05-29 14:04:00,923 WARNING  93027 Realtime synonym is disabled, since no redis connection.
+2025-05-29 14:04:00,923 INFO     93027 MAX_CONTENT_LENGTH: 134217728
+2025-05-29 14:04:00,923 INFO     93027 MAX_FILE_COUNT_PER_USER: 0
+2025-05-29 14:04:01,738 INFO     93027 init web data success:0.7866222858428955
+usage: ragflow_server.py [-h] [--version] [--debug]
+ragflow_server.py: error: unrecognized arguments: --port=9380

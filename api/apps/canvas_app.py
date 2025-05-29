@@ -256,7 +256,7 @@ def run():
     if not e:
         return get_data_error_result(message="canvas not found.")
     
-    if cvs.is_virtual.equals(True):
+    if cvs.is_virtual == True:
         return get_data_error_result(message="can not talk to a virtual assistant")
 
     if not isinstance(cvs.dsl, str):
@@ -288,7 +288,7 @@ def run():
                     ans = {"answer": ans["content"], "reference": ans.get("reference", [])}
                     yield "data:" + json.dumps({"code": 0, "message": "", "data": ans}, ensure_ascii=False) + "\n\n"
 
-                canvas.messages.append({"role": "assistant", "content": final_ans["content"], "id": message_id})
+                canvas.messages.append({"role": "assistant", "content": final_ans["content"], "id": message_id,"reference":final_ans.get("reference")})
                 canvas.history.append(("assistant", final_ans["content"]))
                 if not canvas.path[-1]:
                     canvas.path.pop(-1)
@@ -319,7 +319,7 @@ def run():
         if answer.get("running_status"):
             continue
         final_ans["content"] = "\n".join(answer["content"]) if "content" in answer else ""
-        canvas.messages.append({"role": "assistant", "content": final_ans["content"], "id": message_id})
+        canvas.messages.append({"role": "assistant", "content": final_ans["content"], "id": message_id,"reference":final_ans.get("reference")})
         if final_ans.get("reference"):
             canvas.reference.append(final_ans["reference"])
         cvs.dsl = json.loads(str(canvas))
@@ -689,24 +689,13 @@ def clone():
                 
                 # 如果是对话（非虚拟助理），且不保留历史，则重置聊天历史
                 if not is_virtual and not req.get("keep_history", False):
-                    # 清空历史消息和路径
-                    logging.info("创建新对话，清空聊天历史但保留系统初始化消息")
+                    # 清空历史消息和路径，让Canvas从begin节点自然运行
+                    logging.info("创建新对话，清空聊天历史，让begin节点自然处理欢迎语")
                     
-                    # 查找Begin节点的prologue内容和第一次交互
-                    begin_prologue = None
-                    first_message = None
+                    # 查找系统消息
                     system_message = None
                     
-                    # 查找begin节点
-                    if "components" in dsl_copy:
-                        for component_id, component in dsl_copy["components"].items():
-                            if component_id.startswith("begin") and "obj" in component and "params" in component["obj"]:
-                                if "prologue" in component["obj"]["params"]:
-                                    begin_prologue = component["obj"]["params"]["prologue"]
-                                    logging.info(f"找到begin节点的prologue: {begin_prologue}")
-                                    break
-                    
-                    # 保存系统消息或助手的欢迎消息
+                    # 保存系统消息
                     if "messages" in dsl_copy and dsl_copy["messages"]:
                         for msg in dsl_copy["messages"]:
                             # 保留系统角色消息
@@ -714,26 +703,11 @@ def clone():
                                 system_message = msg
                                 logging.info(f"找到系统消息: {system_message}")
                                 break
-                            # 或保留助手的第一条消息(通常是欢迎语)
-                            elif msg.get("role") == "assistant" and not first_message:
-                                first_message = msg
-                                logging.info(f"找到助手首条消息: {first_message}")
                     
-                    # 重置消息历史，但保留系统消息或欢迎消息
+                    # 重置消息历史，但保留系统消息
                     new_messages = []
                     if system_message:
                         new_messages.append(system_message)
-                    elif first_message:
-                        new_messages.append(first_message)
-                    elif begin_prologue:
-                        # 如果没有系统消息但有prologue，创建一个新的欢迎消息
-                        welcome_msg = {
-                            "role": "assistant",
-                            "content": begin_prologue,
-                            "id": get_uuid()
-                        }
-                        new_messages.append(welcome_msg)
-                        logging.info(f"创建新的欢迎消息: {welcome_msg}")
                     
                     # 更新DSL
                     dsl_copy["messages"] = new_messages
@@ -792,6 +766,29 @@ def clone():
             return get_data_error_result(message="Failed to clone canvas.")
             
         logging.info(f"Canvas克隆成功: 源ID={source_id}, 新ID={new_id}, 标题={new_title}")
+        
+        # 自动触发begin组件执行，显示欢迎语
+        try:
+            canvas = Canvas(json.dumps(dsl_copy), current_user.id)
+            logging.info("开始自动执行Canvas流程，生成欢迎语")
+            
+            # 使用Canvas正常流程运行，这将自动从begin节点开始执行
+            for answer in canvas.run(stream=False):
+                # 跳过中间状态更新
+                if answer.get("running_status"):
+                    continue
+                
+                # 答案已经自动添加到Canvas中，无需手动添加
+                logging.info(f"Canvas流程自动执行完成，生成欢迎消息")
+                break
+                
+            # 更新DSL状态
+            dsl_copy = json.loads(str(canvas))
+            new_canvas["dsl"] = dsl_copy
+            UserCanvasService.update_by_id(new_id, {"dsl": dsl_copy})
+            logging.info(f"已更新DSL状态，消息数量: {len(dsl_copy.get('messages', []))}，路径: {dsl_copy.get('path', [])}")
+        except Exception as e:
+            logging.warning(f"自动执行begin组件时出错: {e}，继续返回结果")
         
         # 返回新创建的Canvas
         return get_json_result(data=new_canvas)

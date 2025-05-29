@@ -23,11 +23,46 @@ export const buildMessageListWithUuid = (messages: any[]) => {
   }
 
   const processedMessages = messages.map((msg) => {
-    // 这里是您现有的处理逻辑
+    // 确保我们拥有正确格式的reference字段
+    let reference = msg.reference;
+
+    // 处理不同格式的引用数据
+    if (reference) {
+      if (typeof reference === 'string') {
+        try {
+          // 尝试解析字符串形式的引用
+          reference = JSON.parse(reference);
+          console.log(
+            `Parsed reference string for message ${msg.id || 'unknown'}:`,
+            reference,
+          );
+        } catch (e) {
+          console.error(
+            `Error parsing reference for message ${msg.id || 'unknown'}:`,
+            e,
+          );
+          reference = []; // 如果解析失败，设置为空数组
+        }
+      }
+
+      // 确保引用是array或保持原有的格式
+      if (
+        !Array.isArray(reference) &&
+        typeof reference === 'object' &&
+        !reference.doc_aggs
+      ) {
+        console.log(
+          `Converting reference object to array for message ${msg.id || 'unknown'}:`,
+          reference,
+        );
+        reference = [reference]; // 将单个引用对象转换为数组
+      }
+    }
+
     const processedMsg = {
       ...msg,
       id: msg.id || uuid(), // 如果没有ID则生成一个
-      // 其他处理逻辑...
+      reference: reference, // 使用处理后的引用
     };
 
     return processedMsg;
