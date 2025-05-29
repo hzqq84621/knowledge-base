@@ -30,72 +30,101 @@ function mapReferencesToMessages(
 
   // 如果没有消息或没有引用，就返回空映射
   if (!messages || messages.length === 0 || !canvasData || !canvasData.dsl) {
+    console.log('mapReferencesToMessages: No messages or canvas data', {
+      hasMessages: !!messages && messages.length > 0,
+      hasCanvasData: !!canvasData,
+      hasDsl: !!(canvasData && canvasData.dsl),
+    });
     return messageReferenceMap;
   }
 
-  // 获取所有非欢迎消息（通常是用户和助手的交互消息）
-  const nonWelcomeMessages = messages.filter(
-    (msg: any) =>
-      msg.role === MessageType.Assistant &&
-      !msg.content.includes('欢迎') &&
-      !msg.content.includes('Welcome'),
-  );
+  // 从Canvas数据中提取引用 - 适配新的引用结构
+  const canvasReferences = canvasData.dsl.reference || [];
 
-  // 从Canvas数据中提取引用
-  const canvasReferences = canvasData.dsl.references || [];
+  console.log('mapReferencesToMessages: Processing references', {
+    messagesCount: messages.length,
+    referencesCount: canvasReferences.length,
+    referencesStructure: canvasReferences.slice(0, 2), // 显示前2个引用的结构
+  });
 
-  if (nonWelcomeMessages.length === 0 || canvasReferences.length === 0) {
+  if (canvasReferences.length === 0) {
     return messageReferenceMap;
   }
 
-  // 不同情况的处理策略
-  if (canvasReferences.length === nonWelcomeMessages.length) {
-    // 情况1：引用数量与非欢迎消息数量相同，一对一映射
-    nonWelcomeMessages.forEach((msg: any, idx: number) => {
-      messageReferenceMap.set(msg.id, canvasReferences[idx]);
-    });
-  } else if (canvasReferences.length > nonWelcomeMessages.length) {
-    // 情况2：引用数量多于消息数量，需要智能映射
-    // 简单策略：将多余的引用附加到最后一条消息
-    nonWelcomeMessages.forEach((msg: any, idx: number) => {
-      if (idx < nonWelcomeMessages.length - 1) {
-        // 除最后一条消息外，一对一映射
-        messageReferenceMap.set(msg.id, canvasReferences[idx]);
-      } else {
-        // 最后一条消息获取剩余所有引用
-        const remainingRefs = canvasReferences.slice(idx);
-        // 合并引用
-        const combinedRef = remainingRefs.reduce((combined: any, ref: any) => {
-          if (combined.doc_aggs) {
-            combined.doc_aggs = [
-              ...(combined.doc_aggs || []),
-              ...(ref.doc_aggs || []),
-            ];
-          } else {
-            combined = ref;
-          }
-          return combined;
-        }, {});
-        messageReferenceMap.set(msg.id, combinedRef);
-      }
-    });
-  } else if (canvasReferences.length === 1 && nonWelcomeMessages.length > 0) {
-    // 情况3：单一引用对应多个消息，将引用附加到最后一条消息
-    const lastMsg = nonWelcomeMessages[nonWelcomeMessages.length - 1];
-    messageReferenceMap.set(lastMsg.id, canvasReferences[0]);
-  } else {
-    // 情况4：引用数量少于消息数量，从末尾开始映射
-    const startIdx = Math.max(
-      0,
-      nonWelcomeMessages.length - canvasReferences.length,
-    );
-    for (let i = 0; i < canvasReferences.length; i++) {
-      messageReferenceMap.set(
-        nonWelcomeMessages[startIdx + i].id,
-        canvasReferences[i],
+  // 处理新的引用结构：{message_id: string, references: any}
+  canvasReferences.forEach((refItem: any, index: number) => {
+    if (refItem.message_id && refItem.references) {
+      // 直接根据message_id映射引用
+      messageReferenceMap.set(refItem.message_id, refItem.references);
+      console.log(`Mapped reference ${index} to message ${refItem.message_id}`);
+    } else {
+      console.log(
+        `Reference ${index} missing message_id or references:`,
+        refItem,
       );
     }
+  });
+
+  // 如果新结构没有数据，回退到旧的映射逻辑（兼容性处理）
+  if (messageReferenceMap.size === 0) {
+    console.log('No new-style references found, trying legacy format...');
+
+    // 获取所有非欢迎消息（通常是用户和助手的交互消息）
+    const nonWelcomeMessages = messages.filter(
+      (msg: any) =>
+        msg.role === MessageType.Assistant &&
+        !msg.content.includes('欢迎') &&
+        !msg.content.includes('Welcome'),
+    );
+
+    // 兼容旧的引用结构 - 从dsl.references获取
+    const legacyReferences = canvasData.dsl.references || [];
+
+    console.log('Legacy mapping attempt:', {
+      nonWelcomeMessagesCount: nonWelcomeMessages.length,
+      legacyReferencesCount: legacyReferences.length,
+    });
+
+    if (nonWelcomeMessages.length === 0 || legacyReferences.length === 0) {
+      return messageReferenceMap;
+    }
+
+    // 简化的映射策略：按时间顺序映射
+    if (legacyReferences.length <= nonWelcomeMessages.length) {
+      // 从最后开始映射
+      const startIdx = Math.max(
+        0,
+        nonWelcomeMessages.length - legacyReferences.length,
+      );
+      for (let i = 0; i < legacyReferences.length; i++) {
+        const message = nonWelcomeMessages[startIdx + i];
+        if (message && message.id) {
+          messageReferenceMap.set(message.id, legacyReferences[i]);
+          console.log(`Legacy mapped reference ${i} to message ${message.id}`);
+        }
+      }
+    } else {
+      // 如果引用多于消息，将所有引用合并到最后一条消息
+      const lastMsg = nonWelcomeMessages[nonWelcomeMessages.length - 1];
+      const combinedRef = legacyReferences.reduce((combined: any, ref: any) => {
+        if (combined.doc_aggs) {
+          combined.doc_aggs = [
+            ...(combined.doc_aggs || []),
+            ...(ref.doc_aggs || []),
+          ];
+        } else {
+          combined = ref;
+        }
+        return combined;
+      }, {});
+      messageReferenceMap.set(lastMsg.id, combinedRef);
+    }
   }
+
+  console.log('Final reference mapping:', {
+    totalMappings: messageReferenceMap.size,
+    mappedMessageIds: Array.from(messageReferenceMap.keys()),
+  });
 
   return messageReferenceMap;
 }
@@ -191,19 +220,48 @@ const AgentChatContainer = ({
 
           const data = response.data;
           if (data && data.code === 0 && data.data) {
-            const canvasMessages = data.data.dsl?.messages || [];
+            // 处理可能是字符串形式的DSL
+            let dsl = data.data.dsl;
+            if (typeof dsl === 'string') {
+              try {
+                dsl = JSON.parse(dsl);
+              } catch (error) {
+                console.error('Failed to parse DSL JSON:', error);
+                dsl = {
+                  components: {},
+                  history: [],
+                  messages: [],
+                  reference: [],
+                  path: [],
+                  answer: [],
+                };
+              }
+            }
+
+            const canvasMessages = dsl?.messages || [];
             const processedMessages = buildMessageListWithUuid(canvasMessages);
 
             // 再次检查，确保状态更新时对话没有切换
             if (loadingConversationRef.current === conversationId) {
               setMessages(processedMessages);
 
-              // 更新引用映射
+              // 更新引用映射 - 使用处理过的DSL
+              const canvasDataWithParsedDsl = {
+                ...data.data,
+                dsl: dsl,
+              };
               const newMessageReferenceMap = mapReferencesToMessages(
                 processedMessages,
-                data.data,
+                canvasDataWithParsedDsl,
               );
               setMessageReferenceMap(newMessageReferenceMap);
+
+              console.log('Canvas data loaded:', {
+                conversationId,
+                messagesCount: processedMessages.length,
+                referencesCount: dsl?.reference?.length || 0,
+                referenceMapSize: newMessageReferenceMap.size,
+              });
             }
           } else {
             // 确保异常情况下也清空消息（只有当前对话）

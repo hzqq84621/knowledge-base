@@ -501,8 +501,7 @@ const AgentChat = () => {
                 filteredAgentList.map((agent: any) => (
                   <div style={{ position: 'relative' }} key={agent.id}>
                     {(agent.permission === 'team' ||
-                      agent.is_own === false ||
-                      agent.nickname) && (
+                      agent.is_own === false) && (
                       <div
                         style={{
                           position: 'absolute',
