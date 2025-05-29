@@ -17,13 +17,23 @@ export const buildMessageUuid = (message: Partial<Message | IMessage>) => {
   return uuid();
 };
 
-export const buildMessageListWithUuid = (messages?: Message[]) => {
-  return (
-    messages?.map((x: Message | IMessage) => ({
-      ...x, // 保留所有字段，包括reference
-      id: buildMessageUuid(x),
-    })) ?? []
-  );
+export const buildMessageListWithUuid = (messages: any[]) => {
+  if (!messages || !Array.isArray(messages)) {
+    return [];
+  }
+
+  const processedMessages = messages.map((msg) => {
+    // 这里是您现有的处理逻辑
+    const processedMsg = {
+      ...msg,
+      id: msg.id || uuid(), // 如果没有ID则生成一个
+      // 其他处理逻辑...
+    };
+
+    return processedMsg;
+  });
+
+  return processedMessages;
 };
 
 export const getConversationId = () => {

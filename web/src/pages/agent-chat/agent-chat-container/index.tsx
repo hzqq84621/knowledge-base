@@ -10,7 +10,7 @@ import {
   buildMessageUuidWithRole,
 } from '@/utils/chat';
 import request from '@/utils/request';
-import { Flex, Spin, message } from 'antd';
+import { Flex, Spin } from 'antd';
 import React, {
   ChangeEventHandler,
   memo,
@@ -21,18 +21,15 @@ import React, {
 import { v4 as uuid } from 'uuid';
 import styles from './index.less';
 
-// 新添加的引用映射函数
+// 引用映射函数
 function mapReferencesToMessages(
   messages: any[],
   canvasData: any,
 ): Map<string, any> {
-  // 创建一个Map来存储消息ID和对应的引用
   const messageReferenceMap = new Map<string, any>();
-  console.log('开始映射引用到消息...');
 
   // 如果没有消息或没有引用，就返回空映射
   if (!messages || messages.length === 0 || !canvasData || !canvasData.dsl) {
-    console.log('无消息或引用数据，返回空映射');
     return messageReferenceMap;
   }
 
@@ -43,27 +40,22 @@ function mapReferencesToMessages(
       !msg.content.includes('欢迎') &&
       !msg.content.includes('Welcome'),
   );
-  console.log(`找到 ${nonWelcomeMessages.length} 条非欢迎消息`);
 
   // 从Canvas数据中提取引用
   const canvasReferences = canvasData.dsl.references || [];
-  console.log(`找到 ${canvasReferences.length} 条引用`);
 
   if (nonWelcomeMessages.length === 0 || canvasReferences.length === 0) {
-    console.log('没有需要映射的消息或引用');
     return messageReferenceMap;
   }
 
   // 不同情况的处理策略
   if (canvasReferences.length === nonWelcomeMessages.length) {
     // 情况1：引用数量与非欢迎消息数量相同，一对一映射
-    console.log('情况1：引用与消息数量相同，一对一映射');
     nonWelcomeMessages.forEach((msg: any, idx: number) => {
       messageReferenceMap.set(msg.id, canvasReferences[idx]);
     });
   } else if (canvasReferences.length > nonWelcomeMessages.length) {
     // 情况2：引用数量多于消息数量，需要智能映射
-    console.log('情况2：引用数量多于消息数量，执行智能映射');
     // 简单策略：将多余的引用附加到最后一条消息
     nonWelcomeMessages.forEach((msg: any, idx: number) => {
       if (idx < nonWelcomeMessages.length - 1) {
@@ -89,12 +81,10 @@ function mapReferencesToMessages(
     });
   } else if (canvasReferences.length === 1 && nonWelcomeMessages.length > 0) {
     // 情况3：单一引用对应多个消息，将引用附加到最后一条消息
-    console.log('情况3：单一引用，附加到最后一条消息');
     const lastMsg = nonWelcomeMessages[nonWelcomeMessages.length - 1];
     messageReferenceMap.set(lastMsg.id, canvasReferences[0]);
   } else {
     // 情况4：引用数量少于消息数量，从末尾开始映射
-    console.log('情况4：引用数量少于消息数量，从末尾开始映射');
     const startIdx = Math.max(
       0,
       nonWelcomeMessages.length - canvasReferences.length,
@@ -107,7 +97,6 @@ function mapReferencesToMessages(
     }
   }
 
-  console.log(`成功映射 ${messageReferenceMap.size} 个引用到消息`);
   return messageReferenceMap;
 }
 
@@ -132,10 +121,14 @@ const AgentChatContainer = ({
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
   >(conversationId);
-  // 新增引用映射状态
+  // 引用映射状态
   const [messageReferenceMap, setMessageReferenceMap] = useState<
     Map<string, any>
   >(new Map());
+
+  // 添加加载状态追踪，防止竞态条件
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+  const loadingConversationRef = useRef<string | null>(null);
 
   const {
     send,
@@ -149,63 +142,97 @@ const AgentChatContainer = ({
   };
 
   useEffect(() => {
-    console.log(`AgentId 变化为: ${agentId}`);
-
+    // Agent变化时清空所有状态并取消任何正在进行的加载
     setMessages([]);
-
-    if (!conversationId) {
-      setCurrentConversationId(null);
-    }
-
+    setMessageReferenceMap(new Map());
+    setCurrentConversationId(null);
     setSendLoading(false);
     setValue('');
+    setIsLoadingConversation(false);
+    loadingConversationRef.current = null;
   }, [agentId]);
 
+  // 组件卸载时清理状态
   useEffect(() => {
+    return () => {
+      setIsLoadingConversation(false);
+      loadingConversationRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    // 防止竞态条件：如果已经在加载某个对话，忽略其他请求
+    if (
+      isLoadingConversation &&
+      loadingConversationRef.current === conversationId
+    ) {
+      return;
+    }
+
     if (conversationId) {
-      console.log(`加载对话历史: ${conversationId}`);
+      // 设置加载状态并记录当前加载的对话ID
+      setIsLoadingConversation(true);
+      loadingConversationRef.current = conversationId;
       setLoading(true);
+
+      // 重要：对话切换时立即清空当前消息状态
+      setMessages([]);
+      setMessageReferenceMap(new Map());
+
       setCurrentConversationId(conversationId);
 
       request
         .get(`/v1/canvas/get/${conversationId}`)
         .then((response) => {
+          // 检查这个响应是否还对应当前要加载的对话
+          if (loadingConversationRef.current !== conversationId) {
+            return;
+          }
+
           const data = response.data;
           if (data && data.code === 0 && data.data) {
-            console.log(
-              '成功加载对话历史',
-              data.data.dsl?.messages?.length || 0,
-            );
             const canvasMessages = data.data.dsl?.messages || [];
             const processedMessages = buildMessageListWithUuid(canvasMessages);
-            setMessages(processedMessages);
 
-            // 更新引用映射
-            const newMessageReferenceMap = mapReferencesToMessages(
-              processedMessages,
-              data.data,
-            );
-            setMessageReferenceMap(newMessageReferenceMap);
-          } else if (data && (data.code === 102 || data.code === 404)) {
-            console.warn(`对话不存在: ${conversationId}`);
-            setMessages([]);
-            message.warning('对话记录不存在或已被删除');
+            // 再次检查，确保状态更新时对话没有切换
+            if (loadingConversationRef.current === conversationId) {
+              setMessages(processedMessages);
+
+              // 更新引用映射
+              const newMessageReferenceMap = mapReferencesToMessages(
+                processedMessages,
+                data.data,
+              );
+              setMessageReferenceMap(newMessageReferenceMap);
+            }
           } else {
-            console.warn('对话历史加载失败或为空:', data);
-            setMessages([]);
+            // 确保异常情况下也清空消息（只有当前对话）
+            if (loadingConversationRef.current === conversationId) {
+              setMessages([]);
+            }
           }
         })
         .catch((error) => {
-          console.error('加载对话历史出错:', error);
-          setMessages([]);
-          message.error('加载对话历史失败');
+          // 确保错误情况下也清空消息（只有当前对话）
+          if (loadingConversationRef.current === conversationId) {
+            setMessages([]);
+          }
         })
         .finally(() => {
-          setLoading(false);
+          // 只有当前对话加载完成才清除加载状态
+          if (loadingConversationRef.current === conversationId) {
+            setLoading(false);
+            setIsLoadingConversation(false);
+            loadingConversationRef.current = null;
+          }
         });
     } else {
+      // 当没有conversationId时，也要清空消息
       setMessages([]);
+      setMessageReferenceMap(new Map());
       setCurrentConversationId(null);
+      setIsLoadingConversation(false);
+      loadingConversationRef.current = null;
     }
   }, [conversationId]);
 
@@ -213,7 +240,6 @@ const AgentChatContainer = ({
     const trimmedValue = value.trim();
     if (!trimmedValue) return;
     if (!agentId) {
-      console.warn('未选择Agent');
       return;
     }
 
@@ -227,25 +253,12 @@ const AgentChatContainer = ({
     setValue('');
     setSendLoading(true);
 
-    console.log(
-      '发送消息给 Agent:',
-      agentId,
-      '当前对话ID:',
-      currentConversationId,
-      '消息:',
-      trimmedValue,
-    );
-
     try {
       const params: Record<string, any> = {
-        id: agentId,
+        id: currentConversationId || agentId, // 优先使用对话ID作为目标Canvas
         message: trimmedValue,
         message_id: userMessage.id,
       };
-
-      if (currentConversationId) {
-        params.conversation_id = currentConversationId;
-      }
 
       const response = await send(params, controller);
 
@@ -253,13 +266,11 @@ const AgentChatContainer = ({
         response &&
         (response?.response.status !== 200 || response?.data?.code !== 0)
       ) {
-        console.error('发送消息错误:', response?.data?.message || '未知错误');
         setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
         setValue(trimmedValue);
         setSendLoading(false);
       }
     } catch (error) {
-      console.error('发送消息失败:', error);
       setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
       setValue(trimmedValue);
       setSendLoading(false);
@@ -273,47 +284,7 @@ const AgentChatContainer = ({
 
   useEffect(() => {
     if (answer && typeof answer === 'object') {
-      console.log('SSE响应数据块:', JSON.stringify(answer, null, 2));
-
-      // 修复类型问题，使用类型断言处理answer对象
       const answerObj = answer as any;
-
-      if (
-        (answerObj.code !== undefined && answerObj.code !== 0) ||
-        (answerObj.data &&
-          answerObj.data.answer &&
-          answerObj.data.answer.startsWith('**ERROR**'))
-      ) {
-        let errorMessage = answerObj.message || '发生未知错误';
-        if (
-          answerObj.data &&
-          answerObj.data.answer &&
-          answerObj.data.answer.startsWith('**ERROR**')
-        ) {
-          errorMessage = answerObj.data.answer.replace('**ERROR**:', '').trim();
-          console.error('SSE Stream Error (内部错误):', errorMessage);
-        } else {
-          console.error('SSE Stream Error (代码错误):', errorMessage);
-        }
-
-        setMessages((prevMessages) => {
-          const currentMessages = Array.isArray(prevMessages)
-            ? prevMessages
-            : [];
-          return [
-            ...currentMessages,
-            {
-              id: uuid(),
-              role: MessageType.Assistant,
-              content: `错误: ${errorMessage}`,
-              error: true,
-            },
-          ];
-        });
-        setSendLoading(false);
-        return;
-      }
-
       const responseData = answerObj.data ? answerObj.data : answerObj;
 
       let newConversationId = null;
@@ -324,7 +295,6 @@ const AgentChatContainer = ({
       }
 
       if (newConversationId && currentConversationId === null) {
-        console.log('接收到新的对话ID:', newConversationId);
         setCurrentConversationId(newConversationId);
       }
 
@@ -384,7 +354,6 @@ const AgentChatContainer = ({
     }
 
     if (done) {
-      console.log('SSE流结束，done=true');
       setSendLoading(false);
     }
   }, [answer, done, currentConversationId]);
@@ -397,29 +366,31 @@ const AgentChatContainer = ({
             <div className={styles.messagePlaceholder}>
               {messages.length > 0 && (
                 <div className={styles.messageList}>
-                  {messages.map((message, i) => (
-                    <MessageItem
-                      key={buildMessageUuidWithRole(message)}
-                      item={message}
-                      loading={
-                        message.role === MessageType.Assistant &&
-                        sendLoading &&
-                        messages.length - 1 === i &&
-                        !done
-                      }
-                      nickname={userInfo.nickname}
-                      avatar={userInfo.avatar}
-                      index={i}
-                      sendLoading={
-                        sendLoading && messages.length - 1 === i && !done
-                      }
-                      reference={
-                        messageReferenceMap.has(message.id)
-                          ? messageReferenceMap.get(message.id)
-                          : message.reference || []
-                      }
-                    />
-                  ))}
+                  {messages.map((message, i) => {
+                    return (
+                      <MessageItem
+                        key={buildMessageUuidWithRole(message)}
+                        item={message}
+                        loading={
+                          message.role === MessageType.Assistant &&
+                          sendLoading &&
+                          messages.length - 1 === i &&
+                          !done
+                        }
+                        nickname={userInfo.nickname}
+                        avatar={userInfo.avatar}
+                        index={i}
+                        sendLoading={
+                          sendLoading && messages.length - 1 === i && !done
+                        }
+                        reference={
+                          messageReferenceMap.has(message.id)
+                            ? messageReferenceMap.get(message.id)
+                            : message.reference || []
+                        }
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>

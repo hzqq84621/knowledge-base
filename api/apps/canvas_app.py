@@ -255,6 +255,9 @@ def run():
     e, cvs = UserCanvasService.get_by_id(req["id"])
     if not e:
         return get_data_error_result(message="canvas not found.")
+    
+    if cvs.is_virtual.equals(True):
+        return get_data_error_result(message="can not talk to a virtual assistant")
 
     if not isinstance(cvs.dsl, str):
         cvs.dsl = json.dumps(cvs.dsl, ensure_ascii=False)

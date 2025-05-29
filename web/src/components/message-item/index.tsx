@@ -3,7 +3,7 @@ import { MessageType } from '@/constants/chat';
 import { useSetModalState } from '@/hooks/common-hooks';
 import { IReference, IReferenceChunk } from '@/interfaces/database/chat';
 import classNames from 'classnames';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   useFetchDocumentInfosByIds,
@@ -13,12 +13,11 @@ import { IRegenerateMessage, IRemoveMessageById } from '@/hooks/logic-hooks';
 import { IMessage } from '@/pages/chat/interface';
 import MarkdownContent from '@/pages/chat/markdown-content';
 import { getExtension, isImage } from '@/utils/document-util';
-import { Avatar, Button, Flex, List, Space, Typography } from 'antd';
+import { Avatar, Button, Flex, List, Typography } from 'antd';
 import FileIcon from '../file-icon';
 import IndentedTreeModal from '../indented-tree/modal';
 import NewDocumentLink from '../new-document-link';
 import { useTheme } from '../theme-provider';
-import { AssistantGroupButton, UserGroupButton } from './group-button';
 import styles from './index.less';
 
 const { Text } = Typography;
@@ -62,14 +61,8 @@ const MessageItem = ({
   const { visible, hideModal, showModal } = useSetModalState();
   const [clickedDocumentId, setClickedDocumentId] = useState('');
 
-  // 增强的引用处理逻辑
+  // 引用处理逻辑
   const effectiveReference = useMemo(() => {
-    // 调试日志
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('MessageItem - reference parameter:', reference);
-      console.log('MessageItem - item.reference:', item.reference);
-    }
-
     // 优先使用传入的reference参数
     if (reference?.doc_aggs && reference.doc_aggs.length > 0) {
       return reference;
@@ -94,6 +87,13 @@ const MessageItem = ({
     // 默认返回空引用
     return { doc_aggs: [] };
   }, [reference, item.reference]);
+
+  // 检查消息内容是否存在
+  if (!item || !item.content) {
+    return (
+      <div style={{ color: 'red', padding: '10px' }}>消息内容错误或缺失</div>
+    );
+  }
 
   const referenceDocumentList = useMemo(() => {
     return effectiveReference?.doc_aggs ?? [];
@@ -140,6 +140,7 @@ const MessageItem = ({
             [styles.messageItemContentReverse]: item.role === MessageType.User,
           })}
         >
+          {/* 头像和内容区域 */}
           {visibleAvatar &&
             (item.role === MessageType.User ? (
               <Avatar size={40} src={avatar ?? '/BR.png'} />
@@ -150,35 +151,10 @@ const MessageItem = ({
             ))}
 
           <Flex vertical gap={8} flex={1}>
-            <Space>
-              {isAssistant ? (
-                index !== 0 && (
-                  <AssistantGroupButton
-                    messageId={item.id}
-                    content={item.content}
-                    prompt={item.prompt}
-                    showLikeButton={showLikeButton}
-                    audioBinary={item.audio_binary}
-                    showLoudspeaker={showLoudspeaker}
-                  ></AssistantGroupButton>
-                )
-              ) : (
-                <UserGroupButton
-                  content={item.content}
-                  messageId={item.id}
-                  removeMessageById={removeMessageById}
-                  regenerateMessage={
-                    regenerateMessage && handleRegenerateMessage
-                  }
-                  sendLoading={sendLoading}
-                ></UserGroupButton>
-              )}
-
-              {/* <b>{isAssistant ? '' : nickname}</b> */}
-            </Space>
+            {/* 消息内容 */}
             <div
               className={
-                isAssistant
+                item.role === MessageType.Assistant
                   ? theme === 'dark'
                     ? styles.messageTextDark
                     : styles.messageText
@@ -190,28 +166,29 @@ const MessageItem = ({
                 content={item.content}
                 reference={effectiveReference}
                 clickDocumentButton={clickDocumentButton}
-              ></MarkdownContent>
+              />
             </div>
+
             {isAssistant && referenceDocumentList.length > 0 && (
               <List
                 bordered
                 dataSource={referenceDocumentList}
-                renderItem={(item) => {
+                renderItem={(refItem) => {
                   return (
                     <List.Item>
                       <Flex gap={'small'} align="center">
                         <FileIcon
-                          id={item.doc_id}
-                          name={item.doc_name}
+                          id={refItem.doc_id}
+                          name={refItem.doc_name}
                         ></FileIcon>
 
                         <NewDocumentLink
-                          documentId={item.doc_id}
-                          documentName={item.doc_name}
+                          documentId={refItem.doc_id}
+                          documentName={refItem.doc_name}
                           prefix="document"
-                          link={item.url}
+                          link={refItem.url}
                         >
-                          {item.doc_name}
+                          {refItem.doc_name}
                         </NewDocumentLink>
                       </Flex>
                     </List.Item>
@@ -223,34 +200,37 @@ const MessageItem = ({
               <List
                 bordered
                 dataSource={documentList}
-                renderItem={(item) => {
+                renderItem={(docItem) => {
                   // TODO:
                   // const fileThumbnail =
-                  //   documentThumbnails[item.id] || documentThumbnails[item.id];
-                  const fileExtension = getExtension(item.name);
+                  //   documentThumbnails[docItem.id] || documentThumbnails[docItem.id];
+                  const fileExtension = getExtension(docItem.name);
                   return (
                     <List.Item>
                       <Flex gap={'small'} align="center">
-                        <FileIcon id={item.id} name={item.name}></FileIcon>
+                        <FileIcon
+                          id={docItem.id}
+                          name={docItem.name}
+                        ></FileIcon>
 
                         {isImage(fileExtension) ? (
                           <NewDocumentLink
-                            documentId={item.id}
-                            documentName={item.name}
+                            documentId={docItem.id}
+                            documentName={docItem.name}
                             prefix="document"
                           >
-                            {item.name}
+                            {docItem.name}
                           </NewDocumentLink>
                         ) : (
                           <Button
                             type={'text'}
-                            onClick={handleUserDocumentClick(item.id)}
+                            onClick={handleUserDocumentClick(docItem.id)}
                           >
                             <Text
                               style={{ maxWidth: '40vw' }}
-                              ellipsis={{ tooltip: item.name }}
+                              ellipsis={{ tooltip: docItem.name }}
                             >
-                              {item.name}
+                              {docItem.name}
                             </Text>
                           </Button>
                         )}

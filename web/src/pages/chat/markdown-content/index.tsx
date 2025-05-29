@@ -5,7 +5,7 @@ import { getExtension } from '@/utils/document-util';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, Flex, Popover } from 'antd';
 import DOMPurify from 'dompurify';
-import { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import Markdown from 'react-markdown';
 import reactStringReplace from 'react-string-replace';
 import SyntaxHighlighter from 'react-syntax-highlighter';
@@ -33,9 +33,10 @@ const reg = /(~{2}\d+={2})/g;
 const getChunkIndex = (match: string) => Number(match.slice(2, -2));
 // TODO: The display of the table is inconsistent with the display previously placed in the MessageItem.
 const MarkdownContent = ({
+  loading,
+  content,
   reference,
   clickDocumentButton,
-  content,
 }: {
   content: string;
   loading: boolean;
@@ -187,6 +188,11 @@ const MarkdownContent = ({
     },
     [getPopoverContent],
   );
+
+  // 检查内容是否存在
+  if (!content) {
+    return <div style={{ color: 'red' }}>内容为空</div>;
+  }
 
   return (
     <Markdown
