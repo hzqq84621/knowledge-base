@@ -26,9 +26,7 @@ import {
   House,
   Library,
   MessageSquareText,
-  Moon,
   Search,
-  Sun,
 } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -65,10 +63,6 @@ export function Header() {
     key: x,
     label: <span>{LanguageMap[x as keyof typeof LanguageMap]}</span>,
   }));
-
-  const onThemeClick = React.useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }, [setTheme, theme]);
 
   const handleBellClick = useCallback(() => {
     navigate('/user-setting/team');
@@ -153,9 +147,6 @@ export function Header() {
         </DropdownMenu>
         <Button variant={'ghost'} onClick={handleDocHelpCLick}>
           <CircleHelp />
-        </Button>
-        <Button variant={'ghost'} onClick={onThemeClick}>
-          {theme === 'light' ? <Sun /> : <Moon />}
         </Button>
         <div className="relative">
           <RAGFlowAvatar

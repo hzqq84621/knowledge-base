@@ -65,7 +65,12 @@ def canvas_list():
                     is_virtual_value = False
                 elif is_virtual_value.isdigit():
                     is_virtual_value = bool(int(is_virtual_value))
+                # 对于其他字符串值，检查是否可能被错误解析
+                else:
+                    logging.warning(f"无法解析is_virtual参数: {is_virtual_value}，使用默认值False")
+                    is_virtual_value = False
             filters['is_virtual'] = is_virtual_value
+            logging.info(f"应用is_virtual过滤器: {is_virtual_value}")
         if params and 'id' in params:
             filters['id'] = params['id']
         

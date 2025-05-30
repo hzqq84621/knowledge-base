@@ -10,7 +10,7 @@ import { LanguageList, LanguageMap } from '@/constants/common';
 import { useChangeLanguage } from '@/hooks/logic-hooks';
 import { useFetchUserInfo, useListTenant } from '@/hooks/user-setting-hooks';
 import { TenantRole } from '@/pages/user-setting/constants';
-import { BellRing, MoonIcon, SunIcon } from 'lucide-react';
+import { BellRing } from 'lucide-react';
 import { useNavigate } from 'umi';
 import styled from './index.less';
 
@@ -49,13 +49,6 @@ const RightToolBar = () => {
     return [...pre!, { type: 'divider' }, cur];
   }, []);
 
-  const onMoonClick = React.useCallback(() => {
-    setTheme('light');
-  }, [setTheme]);
-  const onSunClick = React.useCallback(() => {
-    setTheme('dark');
-  }, [setTheme]);
-
   const handleBellClick = useCallback(() => {
     navigate('/user-setting/team');
   }, [navigate]);
@@ -69,13 +62,6 @@ const RightToolBar = () => {
             <DownOutlined />
           </Space>
         </Dropdown>
-        <Circle>
-          {theme === 'dark' ? (
-            <MoonIcon onClick={onMoonClick} size={20} />
-          ) : (
-            <SunIcon onClick={onSunClick} size={20} />
-          )}
-        </Circle>
         {showBell && (
           <Circle>
             <div className="relative" onClick={handleBellClick}>

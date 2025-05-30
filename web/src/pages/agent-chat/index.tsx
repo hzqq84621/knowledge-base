@@ -18,6 +18,8 @@ import {
   useRenameConversation,
 } from '@/hooks/agent-hooks';
 import { useShowDeleteConfirm, useTranslate } from '@/hooks/common-hooks';
+import flowService from '@/services/flow-service';
+import request from '@/utils/request';
 import {
   DeleteOutlined,
   EditOutlined,
@@ -423,18 +425,146 @@ const AgentChat = () => {
   /**
    * 确认删除Agent的对话框
    * 显示确认对话框并处理删除操作
+   * 同时删除与该Agent相关的所有对话
    */
   const confirmDeleteAgent = useCallback(
     (agentId: string) => {
       Modal.confirm({
         title: t('confirmDelete'),
-        content: t('confirmDeleteContent'),
+        content: t('confirmDeleteContent') + '，同时将删除所有相关对话',
+        okText: '确认删除',
+        cancelText: '取消',
         onOk: async () => {
-          await deleteAgent(agentId);
+          try {
+            // 先获取Agent信息以确定catalog值
+            const response = await request.get(`/v1/canvas/get/${agentId}`);
+
+            if (response?.data?.code === 0 && response.data.data) {
+              const agentData = response.data.data;
+              const catalog =
+                agentData.catalog ||
+                (agentId.length >= 16 ? agentId.substring(0, 16) : null);
+
+              if (catalog) {
+                console.log(
+                  `准备删除Agent(${agentId})及其关联的对话，catalog: ${catalog}`,
+                );
+
+                try {
+                  // 获取与该catalog关联的所有对话
+                  const params = {
+                    page: 1,
+                    page_size: 1000, // 增加数量确保获取全部相关对话
+                    keywords: '',
+                    catalog,
+                  };
+
+                  // 获取对话列表
+                  console.log(`正在获取catalog为${catalog}的所有对话...`);
+                  const listResponse = await request.get('/v1/canvas/list', {
+                    params,
+                  });
+
+                  if (
+                    listResponse?.data?.code === 0 &&
+                    listResponse.data.data
+                  ) {
+                    // 过滤出与当前助理关联的对话，排除Agent自身并确保是对话而不是其他agent
+                    const conversations = listResponse.data.data.filter(
+                      (item: any) =>
+                        item.id !== agentId &&
+                        item.catalog === catalog &&
+                        item.is_virtual === false,
+                    );
+
+                    console.log(
+                      `找到${conversations.length}个关联对话需要删除`,
+                    );
+
+                    if (conversations.length > 0) {
+                      // 收集所有对话的ID
+                      const conversationIds = conversations.map(
+                        (item: any) => item.id,
+                      );
+                      console.log(
+                        `准备删除以下对话: ${conversationIds.join(', ')}`,
+                      );
+
+                      // 使用原子操作一次性删除这些对话
+                      try {
+                        const deleteResult = await flowService.removeCanvas({
+                          canvasIds: conversationIds,
+                        });
+
+                        if (deleteResult?.data?.code === 0) {
+                          console.log(
+                            `成功删除${conversationIds.length}个关联对话`,
+                          );
+                          message.success(
+                            `已删除${conversationIds.length}个相关对话`,
+                          );
+                        } else {
+                          console.error(
+                            '删除关联对话请求失败:',
+                            deleteResult?.data,
+                          );
+                          message.warning('部分关联对话可能未完全删除');
+                        }
+                      } catch (deleteError) {
+                        console.error('删除关联对话出错:', deleteError);
+                        message.warning('删除关联对话时出错，继续删除助理');
+                      }
+                    }
+                  } else {
+                    console.log('未找到关联对话或获取对话列表失败');
+                  }
+                } catch (listError) {
+                  console.error('获取关联对话列表时出错:', listError);
+                  message.warning('获取关联对话列表失败，只删除助理');
+                }
+              }
+
+              // 无论是否有catalog或删除对话是否成功，最后都要删除Agent本身
+              console.log(`开始删除Agent(${agentId})...`);
+              const result = await deleteAgent(agentId);
+              console.log('删除Agent结果:', result);
+
+              // 如果当前选中的是被删除的Agent，清除选择
+              if (agentId === activeAgentId) {
+                setActiveAgentId(null);
+                setActiveCatalog(null);
+                setActiveConversationId(null);
+              }
+
+              return result;
+            } else {
+              // 如果获取Agent信息失败，仍然尝试删除Agent本身
+              console.error('获取Agent信息失败:', response?.data);
+              return await deleteAgent(agentId);
+            }
+          } catch (error) {
+            console.error('删除Agent及关联对话过程中出错:', error);
+            message.error('删除过程中发生错误，请重试');
+
+            // 尽管出错，仍然尝试删除Agent本身
+            try {
+              return await deleteAgent(agentId);
+            } catch (deleteError) {
+              console.error('最终尝试删除Agent失败:', deleteError);
+              return false;
+            }
+          }
         },
       });
     },
-    [deleteAgent, t],
+    [
+      deleteAgent,
+      t,
+      activeAgentId,
+      setActiveAgentId,
+      setActiveCatalog,
+      setActiveConversationId,
+    ],
   );
 
   /**
