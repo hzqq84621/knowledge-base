@@ -174,7 +174,7 @@ dependencies = [
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/76/21/bf42bbc2c377ac2d6f2b4c05c99899350c814ad8ed0a5964cbecaf2cbb0b/akshare-1.16.80.tar.gz", hash = "sha256:997de31a7880f8665d031e5869f9a96a906de86734ef5d7a2ae3a5e0be4f58b7" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/f8/00/b90573297e3dd8a13294e5f0b1ae7b64ead49dfe616a943dd4bfa4f3f615/akshare-1.16.80-py3-none-any.whl", hash = "sha256:883937b55cc3d40883742f3360ae25fe5c538cd83338374612ceba744bd83bed" },
-
+]
 
 [[package]]
 name = "alabaster"
