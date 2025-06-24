@@ -1,5 +1,5 @@
 {
-  "appName": "RAGFlow",
+  "appName": "博瑞 企知",
   "api": {
     "baseUrl": "http://localhost:9380",
     "version": "v1"
