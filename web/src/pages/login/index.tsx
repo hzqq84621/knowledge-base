@@ -122,24 +122,6 @@ const Login = () => {
               <Checkbox> {t('rememberMe')}</Checkbox>
             </Form.Item>
           )}
-          <div>
-            {title === 'login' && registerEnabled && (
-              <div>
-                {t('signInTip')}
-                <Button type="link" onClick={changeTitle}>
-                  {t('signUp')}
-                </Button>
-              </div>
-            )}
-            {title === 'register' && (
-              <div>
-                {t('signUpTip')}
-                <Button type="link" onClick={changeTitle}>
-                  {t('login')}
-                </Button>
-              </div>
-            )}
-          </div>
           <Button
             type="primary"
             block
