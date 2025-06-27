@@ -52,6 +52,118 @@ from api.apps.auth import get_auth_client
 
 from api.utils.file_utils import get_project_base_directory
 
+def sync_users_from_json():
+    """
+    从 user-data.json 文件同步用户到数据库
+    如果用户不存在则创建，如果存在则更新密码
+    """
+    try:
+        json_file_path = "/Users/bj/knowledge-base/user-data.json"
+        
+        # 检查文件是否存在
+        if not os.path.exists(json_file_path):
+            logging.warning(f"JSON用户文件不存在: {json_file_path}")
+            return
+            
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            # 移除JSON中的注释行
+            lines = content.split('\n')
+            clean_lines = [line for line in lines if not line.strip().startswith('//')]
+            clean_content = '\n'.join(clean_lines)
+            user_data = json.loads(clean_content)
+        
+        logging.info(f"开始同步JSON用户，共 {len(user_data)} 个用户")
+        
+        for email, user_info in user_data.items():
+            password = user_info.get("password", "")
+            if not password:
+                logging.warning(f"用户 {email} 没有密码，跳过")
+                continue
+                
+            # 获取额外的用户信息
+            is_superuser = user_info.get("is_superuser", False)
+            nickname = user_info.get("nickname", email)  # 如果没有nickname，使用email
+                
+            # 检查用户是否已存在
+            existing_users = UserService.query(email=email)
+            
+            if existing_users:
+                # 用户存在，更新密码和其他信息
+                user = existing_users[0]
+                # 生成密码哈希
+                password_hash = generate_password_hash(password)
+                update_data = {
+                    "password": password_hash,
+                    "nickname": nickname,
+                    "is_superuser": is_superuser
+                }
+                UserService.update_by_id(user.id, update_data)
+                logging.info(f"已更新用户 {email} 的信息")
+            else:
+                # 用户不存在，创建新用户
+                logging.info(f"创建新用户: {email}")
+                
+                user_dict = {
+                    "access_token": get_uuid(),
+                    "email": email,
+                    "nickname": nickname,
+                    "password": password,  # 这里传入明文，user_register函数会处理
+                    "login_channel": "password",
+                    "last_login_time": get_format_time(),
+                    "is_superuser": is_superuser,
+                }
+                
+                user_id = get_uuid()
+                
+                # 配置LLM
+                llm_data = {
+                    "tenant_id": user_id,
+                    "llm_factory": "VLLM",
+                    "model_type": "chat",
+                    "llm_name": "QwQ-32B",   
+                    "api_base": "http://192.168.110.214:8000/v1",
+                    "api_key": "x",
+                    "max_tokens": 10000
+                }
+                
+                try:
+                    # 创建用户
+                    users = user_register(user_id, user_dict)
+                    if users and len(users) > 0:
+                        logging.info(f"成功创建用户: {email}")
+                        
+                        # 配置LLM（简化版，不做验证以避免创建时出错）
+                        llm = {
+                            "tenant_id": user_id,
+                            "llm_factory": llm_data["llm_factory"],
+                            "model_type": llm_data["model_type"],
+                            "llm_name": llm_data["llm_name"] + "___VLLM",
+                            "api_base": llm_data["api_base"],
+                            "api_key": llm_data["api_key"],
+                            "max_tokens": llm_data["max_tokens"]
+                        }
+                        
+                        # 尝试保存LLM配置
+                        try:
+                            if not TenantLLMService.filter_update(
+                                    [TenantLLM.tenant_id == user_id, 
+                                     TenantLLM.llm_factory == llm["llm_factory"],
+                                     TenantLLM.llm_name == llm["llm_name"]], llm):
+                                TenantLLMService.save(**llm)
+                        except Exception as llm_error:
+                            logging.warning(f"为用户 {email} 配置LLM失败: {llm_error}")
+                            
+                    else:
+                        logging.error(f"创建用户失败: {email}")
+                        
+                except Exception as e:
+                    logging.exception(f"创建用户 {email} 时发生异常: {e}")
+                    rollback_user_registration(user_id)
+                    
+    except Exception as e:
+        logging.exception(f"同步JSON用户时发生异常: {e}")
+
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
 def login():
     """
@@ -91,105 +203,47 @@ def login():
     email = request.json.get("email", "")
     password = request.json.get("password")
     
-    # Debug: Log original email and encrypted password
-    logging.info(f"DEBUG: Login attempt - email: {email}")
-    logging.info(f"DEBUG: Encrypted password length: {len(password) if password else 'None'}")
+    logging.info(f"Login attempt - email: {email}")
     
+    # 步骤1: 先同步JSON用户到数据库
+    sync_users_from_json()
+    
+    # 步骤2: 解密密码
     try:
         password = decrypt(password)
-        logging.info(f"DEBUG: Decrypted password (step 1): '{password}'")
         
-        # Check if the decrypted password is base64 encoded
+        # 尝试Base64解码
         try:
             import base64
             decoded_password = base64.b64decode(password).decode('utf-8')
-            logging.info(f"DEBUG: Base64 decoded password (step 2): '{decoded_password}'")
             password = decoded_password
-        except Exception as decode_error:
-            logging.info(f"DEBUG: Base64 decode failed, using original decrypted password: {decode_error}")
-            # If base64 decode fails, use the original decrypted password
+        except Exception:
+            # 如果Base64解码失败，使用原始解密密码
             pass
             
-        logging.info(f"DEBUG: Final password: '{password}'")
     except BaseException as e:
-        logging.error(f"DEBUG: Password decryption failed: {e}")
+        logging.error(f"Password decryption failed: {e}")
         return get_json_result(
             data=False, code=settings.RetCode.SERVER_ERROR, message="Fail to crypt password"
         )
 
-    # First try to authenticate with database
-    users = UserService.query(email=email)
-    logging.info(f"DEBUG: Database query for email '{email}' returned {len(users) if users else 0} users")
+    # 步骤3: 进行标准数据库认证
+    user = UserService.query_user(email, password)
     
-    if users:
-        user = UserService.query_user(email, password)
-        logging.info(f"DEBUG: Database password verification result: {'Success' if user else 'Failed'}")
-        if user:
-            response_data = user.to_json()
-            user.access_token = get_uuid()
-            login_user(user)
-            user.update_time = (current_timestamp(),)
-            user.update_date = (datetime_format(datetime.now()),)
-            user.save()
-            msg = "Welcome back!"
-            return construct_response(data=response_data, auth=user.get_id(), message=msg)
-        else:
-            # User exists in database but password is wrong
-            logging.info("DEBUG: User exists in database but password verification failed")
-            return get_json_result(
-                data=False,
-                code=settings.RetCode.AUTHENTICATION_ERROR,
-                message="Email and password do not match!",
-            )
+    if user:
+        # 认证成功
+        logging.info(f"User {email} login successful")
+        response_data = user.to_json()
+        user.access_token = get_uuid()
+        login_user(user)
+        user.update_time = (current_timestamp(),)
+        user.update_date = (datetime_format(datetime.now()),)
+        user.save()
+        msg = "Welcome back!"
+        return construct_response(data=response_data, auth=user.get_id(), message=msg)
     else:
-        # User not found in database, try to authenticate with user-data.json file
-        logging.info("DEBUG: User not found in database, trying JSON file authentication")
-        try:
-            with open("/Users/bj/knowledge-base/user-data.json", "r") as f:
-                user_data = json.load(f)
-            
-            logging.info(f"DEBUG: JSON file loaded successfully, keys: {list(user_data.keys())}")
-            logging.info(f"DEBUG: Checking if email '{email}' exists in JSON file")
-            
-            if email in user_data:
-                json_password = user_data[email].get("password")
-                logging.info(f"DEBUG: Found email in JSON, stored password: '{json_password}'")
-                logging.info(f"DEBUG: Comparing passwords - input: '{password}' vs stored: '{json_password}'")
-                logging.info(f"DEBUG: Password match: {password == json_password}")
-                
-                if json_password == password:
-                    # User exists in JSON file, try to register them
-                    logging.info("DEBUG: JSON password verification successful, attempting user registration")
-                    try:
-                        new_user = create_user_from_json(email, email, password)
-                        if new_user:
-                            logging.info("DEBUG: User registration from JSON successful")
-                            response_data = new_user.to_json()
-                            new_user.access_token = get_uuid()
-                            login_user(new_user)
-                            new_user.update_time = (current_timestamp(),)
-                            new_user.update_date = (datetime_format(datetime.now()),)
-                            new_user.save()
-                            msg = "Welcome back!"
-                            return construct_response(data=response_data, auth=new_user.get_id(), message=msg)
-                        else:
-                            logging.error("DEBUG: User registration from JSON failed - create_user_from_json returned None")
-                    except Exception as e:
-                        logging.exception(f"DEBUG: User registration from JSON failed with exception: {e}")
-                        # If registration fails, fall through to password mismatch error
-                        pass
-                else:
-                    logging.info("DEBUG: JSON password verification failed")
-            else:
-                logging.info(f"DEBUG: Email '{email}' not found in JSON file")
-                
-        except Exception as e:
-            logging.exception(f"DEBUG: JSON file access failed: {e}")
-            # If JSON file access fails, fall through to password mismatch error
-            pass
-        
-        # If both database and JSON file authentication fail
-        logging.info("DEBUG: All authentication methods failed")
+        # 认证失败
+        logging.info(f"User {email} login failed - invalid credentials")
         return get_json_result(
             data=False,
             code=settings.RetCode.AUTHENTICATION_ERROR,
@@ -1051,195 +1105,4 @@ def set_tenant_info():
     except Exception as e:
         return server_error_response(e)
 
-def create_user_from_json(email, nickname, password):
-    """
-    Create a new user based on JSON file authentication.
-    This function is based on the existing user_add logic.
-    """
-    try:
-        # For JSON users, treat non-email formats (like "admin") as valid email addresses
-        # No need to convert or validate - our system has a broad definition of email
-        logging.info(f"DEBUG: Processing email/username: {email}")
-        
-        # Skip email format validation entirely for JSON users
-        # This allows for flexible email definitions in the system
-        logging.info(f"DEBUG: Email format validation skipped for JSON user: {email}")
 
-        # Check if the email address is already used in database
-        if UserService.query(email=email):
-            logging.warning(f"Email: {email} has already registered in database")
-            return None
-
-        # Construct user info data
-        user_dict = {
-            "access_token": get_uuid(),
-            "email": email,
-            "nickname": nickname,
-            "password": password,  # Already decrypted password
-            "login_channel": "password",
-            "last_login_time": get_format_time(),
-            "is_superuser": False,
-        }
-
-        user_id = get_uuid()
-        logging.info(f"DEBUG: Creating user with email: {email}, nickname: {nickname}")
-
-        # LLM configuration (same as in user_add)
-        llm_data = {
-            "tenant_id": user_id,
-            "llm_factory": "VLLM",
-            "model_type": "chat",
-            "llm_name": "QwQ-32B",   
-            "api_base": "http://192.168.110.214:8000/v1",
-            "api_key": "x",
-            "max_tokens": 10000
-        }
-        
-        def add_llm(llm_param):
-            req = llm_param 
-            factory = req["llm_factory"]
-            api_key = req.get("api_key", "x")
-            llm_name = req.get("llm_name")
-
-            def apikey_json(keys):
-                nonlocal req
-                return json.dumps({k: req.get(k, "") for k in keys})
-
-            if factory == "VolcEngine":
-                api_key = apikey_json(["ark_api_key", "endpoint_id"])
-            elif factory == "Tencent Hunyuan":
-                req["api_key"] = apikey_json(["hunyuan_sid", "hunyuan_sk"])
-                return ""  # Skip set_api_key() call
-            elif factory == "Tencent Cloud":
-                req["api_key"] = apikey_json(["tencent_cloud_sid", "tencent_cloud_sk"])
-                return ""  # Skip set_api_key() call
-            elif factory == "Bedrock":
-                api_key = apikey_json(["bedrock_ak", "bedrock_sk", "bedrock_region"])
-            elif factory == "LocalAI":
-                llm_name += "___LocalAI"
-            elif factory == "HuggingFace":
-                llm_name += "___HuggingFace"
-            elif factory == "OpenAI-API-Compatible":
-                llm_name += "___OpenAI-API"
-            elif factory == "VLLM":
-                llm_name += "___VLLM"
-            elif factory == "XunFei Spark":
-                if req["model_type"] == "chat":
-                    api_key = req.get("spark_api_password", "")
-                elif req["model_type"] == "tts":
-                    api_key = apikey_json(["spark_app_id", "spark_api_secret", "spark_api_key"])
-            elif factory == "BaiduYiyan":
-                api_key = apikey_json(["yiyan_ak", "yiyan_sk"])
-            elif factory == "Fish Audio":
-                api_key = apikey_json(["fish_audio_ak", "fish_audio_refid"])
-            elif factory == "Google Cloud":
-                api_key = apikey_json(["google_project_id", "google_region", "google_service_account_key"])
-            elif factory == "Azure-OpenAI":
-                api_key = apikey_json(["api_key", "api_version"])
-
-            llm = {
-                "tenant_id": user_id,
-                "llm_factory": factory,
-                "model_type": req["model_type"],
-                "llm_name": llm_name,
-                "api_base": req.get("api_base", ""),
-                "api_key": api_key,
-                "max_tokens": req.get("max_tokens")
-            }
-
-            msg = ""
-            mdl_nm = llm["llm_name"].split("___")[0]
-            if llm["model_type"] == LLMType.EMBEDDING.value:
-                try:
-                    assert factory in EmbeddingModel, f"Embedding model from {factory} is not supported yet."
-                    mdl = EmbeddingModel[factory](
-                        key=llm['api_key'],
-                        model_name=mdl_nm,
-                        base_url=llm["api_base"])
-                    arr, tc = mdl.encode(["Test if the api key is available"])
-                    if len(arr[0]) == 0:
-                        raise Exception("Fail")
-                except Exception as e:
-                    msg += f"\nFail to access embedding model({mdl_nm})." + str(e)
-            elif llm["model_type"] == LLMType.CHAT.value:
-                try:
-                    assert factory in ChatModel, f"Chat model from {factory} is not supported yet."
-                    mdl = ChatModel[factory](
-                        key=llm['api_key'],
-                        model_name=mdl_nm,
-                        base_url=llm["api_base"]
-                    )
-                    # Skip actual chat test to avoid errors during user creation
-                except Exception as e:
-                    msg += f"\nFail to access chat model({mdl_nm})." + str(e)
-            elif llm["model_type"] == LLMType.RERANK:
-                try:
-                    assert factory in RerankModel, f"RE-rank model from {factory} is not supported yet."
-                    mdl = RerankModel[factory](
-                        key=llm["api_key"],
-                        model_name=mdl_nm,
-                        base_url=llm["api_base"]
-                    )
-                    arr, tc = mdl.similarity("Hello~ Ragflower!", ["Hi, there!", "Ohh, my friend!"])
-                    if len(arr) == 0:
-                        raise Exception("Not known.")
-                except KeyError:
-                    msg += f"{factory} dose not support this model({mdl_nm})"
-                except Exception as e:
-                    msg += f"\nFail to access model({mdl_nm})." + str(e)
-            elif llm["model_type"] == LLMType.IMAGE2TEXT.value:
-                try:
-                    assert factory in CvModel, f"Image to text model from {factory} is not supported yet."
-                    mdl = CvModel[factory](
-                        key=llm["api_key"],
-                        model_name=mdl_nm,
-                        base_url=llm["api_base"]
-                    )
-                    with open(os.path.join(get_project_base_directory(), "web/src/assets/yay.jpg"), "rb") as f:
-                        m, tc = mdl.describe(f.read())
-                        if not m and not tc:
-                            raise Exception(m)
-                except Exception as e:
-                    msg += f"\nFail to access model({mdl_nm})." + str(e)
-            elif llm["model_type"] == LLMType.TTS:
-                try:
-                    assert factory in TTSModel, f"TTS model from {factory} is not supported yet."
-                    mdl = TTSModel[factory](
-                        key=llm["api_key"], model_name=mdl_nm, base_url=llm["api_base"]
-                    )
-                    for resp in mdl.tts("Hello~ Ragflower!"):
-                        pass
-                except RuntimeError as e:
-                    msg += f"\nFail to access model({mdl_nm})." + str(e)
-
-            if msg:
-                return msg
-
-            if not TenantLLMService.filter_update(
-                    [TenantLLM.tenant_id == user_id, TenantLLM.llm_factory == factory,
-                    TenantLLM.llm_name == llm["llm_name"]], llm):
-                TenantLLMService.save(**llm)
-
-            return ""
-        
-        # Add LLM configuration
-        msg = add_llm(llm_data)
-        if msg:
-            logging.warning(f"LLM configuration failed: {msg}")
-            # Continue with user creation even if LLM setup fails
-        
-        # Create user
-        users = user_register(user_id, user_dict)
-        if not users:
-            raise Exception(f"Fail to register {email}.")
-        if len(users) > 1:
-            raise Exception(f"Same email: {email} exists!")
-        
-        user = users[0]
-        logging.info(f"Successfully created user from JSON: {email}")
-        return user
-        
-    except Exception as e:
-        rollback_user_registration(user_id)
-        logging.exception(f"User creation from JSON failed: {e}")
-        return None
