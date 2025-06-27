@@ -17,7 +17,7 @@ from datetime import datetime
 
 from peewee import fn
 
-from api.db import StatusEnum, TenantPermission
+from api.db import StatusEnum, TenantPermission, UserTenantRole
 from api.db.db_models import DB, Document, Knowledgebase, Tenant, User, UserTenant
 from api.db.services.common_service import CommonService
 from api.utils import current_timestamp, datetime_format
@@ -164,12 +164,29 @@ class KnowledgebaseService(CommonService):
         
         # 权限查询逻辑:
         # 1. 用户可以看到自己创建的所有知识库
-        # 2. 用户可以看到同一租户下其他用户创建的、权限为team的知识库
-        permission_condition = (
-            (cls.model.created_by == user_id) |  # 用户自己创建的
-            ((cls.model.tenant_id.in_(joined_tenant_ids)) &  # 同一租户下的
-             (cls.model.permission == TenantPermission.TEAM.value))  # 且权限为team的
+        # 2. 用户可以看到同一租户下、角色为OWNER的用户创建的、权限为team的知识库
+        from api.db.db_models import UserTenant
+        
+        # 构建复杂的查询条件
+        # 情况1：用户自己创建的知识库
+        user_own_condition = (cls.model.created_by == user_id)
+        
+        # 情况2：租户内OWNER角色创建的team权限知识库
+        # 先创建子查询来找到每个租户的OWNER用户
+        owner_subquery = UserTenant.select(UserTenant.user_id).where(
+            (UserTenant.tenant_id.in_(joined_tenant_ids)) &
+            (UserTenant.role == UserTenantRole.OWNER) &
+            (UserTenant.status == StatusEnum.VALID.value)
         )
+        
+        shared_condition = (
+            (cls.model.tenant_id.in_(joined_tenant_ids)) &  # 同一租户下的
+            (cls.model.permission == TenantPermission.TEAM.value) &  # 权限为team的
+            (cls.model.created_by.in_(owner_subquery))  # 创建者必须是OWNER角色
+        )
+        
+        # 组合两种情况
+        permission_condition = user_own_condition | shared_condition
         
         if keywords:
             kbs = cls.model.select(*fields).join(User, on=(cls.model.tenant_id == User.id)).where(
@@ -349,12 +366,29 @@ class KnowledgebaseService(CommonService):
             
         # 权限查询逻辑:
         # 1. 用户可以看到自己创建的所有知识库
-        # 2. 用户可以看到同一租户下其他用户创建的、权限为team的知识库
-        permission_condition = (
-            (cls.model.created_by == user_id) |  # 用户自己创建的
-            ((cls.model.tenant_id.in_(joined_tenant_ids)) &  # 同一租户下的
-             (cls.model.permission == TenantPermission.TEAM.value))  # 且权限为team的
+        # 2. 用户可以看到同一租户下、角色为OWNER的用户创建的、权限为team的知识库
+        from api.db.db_models import UserTenant
+        
+        # 构建复杂的查询条件
+        # 情况1：用户自己创建的知识库（无需JOIN）
+        user_own_condition = (cls.model.created_by == user_id)
+        
+        # 情况2：租户内OWNER角色创建的team权限知识库（需要JOIN UserTenant）
+        # 先创建子查询来找到每个租户的OWNER用户
+        owner_subquery = UserTenant.select(UserTenant.user_id).where(
+            (UserTenant.tenant_id.in_(joined_tenant_ids)) &
+            (UserTenant.role == UserTenantRole.OWNER) &
+            (UserTenant.status == StatusEnum.VALID.value)
         )
+        
+        shared_condition = (
+            (cls.model.tenant_id.in_(joined_tenant_ids)) &  # 同一租户下的
+            (cls.model.permission == TenantPermission.TEAM.value) &  # 权限为team的
+            (cls.model.created_by.in_(owner_subquery))  # 创建者必须是OWNER角色
+        )
+        
+        # 组合两种情况
+        permission_condition = user_own_condition | shared_condition
         
         kbs = kbs.where(
             permission_condition & (cls.model.status == StatusEnum.VALID.value)
@@ -407,7 +441,7 @@ class KnowledgebaseService(CommonService):
         if kb_info.permission == TenantPermission.ME.value:
             return False
             
-        # 如果权限是"team"，检查用户是否在同一租户中
+        # 如果权限是"team"，检查是否满足共享条件
         if kb_info.permission == TenantPermission.TEAM.value:
             # 查询用户是否属于该租户
             tenant_membership = UserTenant.select().where(
@@ -416,7 +450,22 @@ class KnowledgebaseService(CommonService):
                 (UserTenant.status == StatusEnum.VALID.value)
             ).first()
             
-            return tenant_membership is not None
+            if not tenant_membership:
+                return False
+            
+            # 进一步检查：只有OWNER角色创建的team权限知识库才对所有成员可见
+            creator_role = UserTenant.select().where(
+                (UserTenant.tenant_id == kb_info.tenant_id) &
+                (UserTenant.user_id == kb_info.created_by) &
+                (UserTenant.status == StatusEnum.VALID.value)
+            ).first()
+            
+            # 如果创建者在该租户中的角色是OWNER，则允许访问
+            if creator_role and creator_role.role == UserTenantRole.OWNER:
+                return True
+            
+            # 如果创建者不是OWNER角色，则不允许其他用户访问
+            return False
             
         return False
 

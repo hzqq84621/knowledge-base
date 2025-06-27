@@ -164,6 +164,65 @@ def sync_users_from_json():
     except Exception as e:
         logging.exception(f"同步JSON用户时发生异常: {e}")
 
+def sync_users_to_super_tenant():
+    """
+    将所有普通用户（is_superuser=0）添加到超级用户（is_superuser=1）的租户中
+    避免重复添加已存在的用户
+    """
+    try:
+        # 1. 查找超级用户
+        super_users = UserService.query(is_superuser=True)
+        if not super_users:
+            logging.warning("未找到超级用户，跳过租户同步")
+            return
+        
+        super_user = super_users[0]  # 取第一个超级用户
+        logging.info(f"找到超级用户: {super_user.email}")
+        
+        # 2. 获取超级用户的租户ID
+        super_user_tenants = UserTenantService.query(user_id=super_user.id)
+        if not super_user_tenants:
+            logging.warning(f"超级用户 {super_user.email} 没有关联的租户")
+            return
+            
+        super_tenant_id = super_user_tenants[0].tenant_id
+        logging.info(f"超级用户租户ID: {super_tenant_id}")
+        
+        # 3. 获取所有普通用户
+        normal_users = UserService.query(is_superuser=False)
+        logging.info(f"找到 {len(normal_users)} 个普通用户")
+        
+        # 4. 检查哪些普通用户还没有加入超级用户租户
+        for normal_user in normal_users:
+            # 检查该用户是否已经在超级用户租户中
+            existing_relation = UserTenantService.query(
+                user_id=normal_user.id, 
+                tenant_id=super_tenant_id
+            )
+            
+            if existing_relation:
+                # 用户已经在超级用户租户中，跳过
+                logging.debug(f"用户 {normal_user.email} 已在超级用户租户中，跳过")
+                continue
+            
+            # 5. 将普通用户添加到超级用户租户中
+            try:
+                user_tenant_relation = {
+                    "tenant_id": super_tenant_id,
+                    "user_id": normal_user.id,
+                    "invited_by": super_user.id,  # 由超级用户邀请
+                    "role": UserTenantRole.NORMAL,  # 普通用户角色
+                }
+                
+                UserTenantService.insert(**user_tenant_relation)
+                logging.info(f"成功将用户 {normal_user.email} 添加到超级用户租户中")
+                
+            except Exception as e:
+                logging.exception(f"将用户 {normal_user.email} 添加到超级用户租户失败: {e}")
+                
+    except Exception as e:
+        logging.exception(f"同步用户到超级用户租户时发生异常: {e}")
+
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
 def login():
     """
@@ -208,7 +267,10 @@ def login():
     # 步骤1: 先同步JSON用户到数据库
     sync_users_from_json()
     
-    # 步骤2: 解密密码
+    # 步骤2: 同步普通用户到超级用户租户
+    sync_users_to_super_tenant()
+    
+    # 步骤3: 解密密码
     try:
         password = decrypt(password)
         
@@ -227,7 +289,7 @@ def login():
             data=False, code=settings.RetCode.SERVER_ERROR, message="Fail to crypt password"
         )
 
-    # 步骤3: 进行标准数据库认证
+    # 步骤4: 进行标准数据库认证
     user = UserService.query_user(email, password)
     
     if user:
@@ -936,8 +998,7 @@ def user_add():
                 if not tc and m.find("**ERROR**:") >= 0:
                     raise Exception(m)
             except Exception as e:
-                msg += f"\nFail to access model({mdl_nm})." + str(
-                    e)
+                msg += f"\nFail to access model({mdl_nm})." + str(e)
             '''
         elif llm["model_type"] == LLMType.RERANK:
             assert factory in RerankModel, f"RE-rank model from {factory} is not supported yet."

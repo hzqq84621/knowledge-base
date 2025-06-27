@@ -1,5 +1,9 @@
 {
-
+    "ruiyuan": {
+        "password": "ruiyuan",
+        "is_superuser": true,
+        "nickname": "瑞元"
+    },
     "admin": {
         "password": "123"   
     },

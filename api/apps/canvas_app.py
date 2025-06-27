@@ -100,8 +100,18 @@ def canvas_list():
         
         # 2. 查询共享给当前用户的Canvas
         # 根据tenant_ids查询同一租户内、权限为"team"且不是自己创建的Canvas
+        # 但只有OWNER角色创建的canvas才能被共享
         if tenant_ids:
             from api.db.db_models import User, UserTenant
+            from api.db import UserTenantRole, StatusEnum
+            
+            # 先找到每个租户中的OWNER用户
+            owner_users = UserTenant.select(UserTenant.user_id).where(
+                (UserTenant.tenant_id.in_(tenant_ids)) &
+                (UserTenant.role == UserTenantRole.OWNER) &
+                (UserTenant.status == StatusEnum.VALID.value)
+            )
+            
             shared_canvas_list = UserCanvasService.model.select().join(
                 UserTenant, on=(UserCanvasService.model.user_id == UserTenant.user_id)
             ).join(
@@ -109,7 +119,8 @@ def canvas_list():
             ).where(
                 (UserCanvasService.model.permission == "team") &
                 (UserCanvasService.model.user_id != current_user.id) &
-                (UserTenant.tenant_id.in_(tenant_ids))
+                (UserTenant.tenant_id.in_(tenant_ids)) &
+                (UserCanvasService.model.user_id.in_(owner_users))  # 只有OWNER角色创建的
             ).distinct()
             
             # 应用其他过滤条件
