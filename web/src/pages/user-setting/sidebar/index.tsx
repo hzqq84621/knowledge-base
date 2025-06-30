@@ -52,9 +52,12 @@ const SideBar = () => {
     } as MenuItem;
   }
 
-  // 过滤掉 "system" 和 "api" 页面
+  // 过滤掉 "system"、"api" 和 "password" 页面
   const filteredRouteKeys = Object.values(UserSettingRouteKey).filter(
-    (value) => value !== UserSettingRouteKey.System && value !== UserSettingRouteKey.Api
+    (value) =>
+      value !== UserSettingRouteKey.System &&
+      value !== UserSettingRouteKey.Api &&
+      value !== UserSettingRouteKey.Password,
   );
 
   const items: MenuItem[] = filteredRouteKeys.map((value) =>
