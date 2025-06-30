@@ -22,9 +22,9 @@ import uuid
 from copy import deepcopy
 
 from api.db import LLMType, UserTenantRole
-from api.db.db_models import init_database_tables as init_web_db, LLMFactories, LLM, TenantLLM
+from api.db.db_models import init_database_tables as init_web_db, LLMFactories, LLM, TenantLLM, User, UserCanvas, DB
 from api.db.services import UserService
-from api.db.services.canvas_service import CanvasTemplateService
+from api.db.services.canvas_service import CanvasTemplateService, UserCanvasService
 from api.db.services.document_service import DocumentService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.llm_service import LLMFactoriesService, LLMService, TenantLLMService, LLMBundle
@@ -165,6 +165,94 @@ def add_graph_templates():
             logging.exception("Add graph templates error: ")
 
 
+
+def insert_sample_data_from_json(json_file_path):
+    from api.db.services import UserService
+    from api.db.services.canvas_service import UserCanvasService
+    import os
+    import json
+    import logging
+
+    if not os.path.exists(json_file_path):
+        logging.warning(f"JSON 文件不存在: {json_file_path}")
+        return False
+
+    try:
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        user_data = data.get("user", [])
+        canvas_data = data.get("user_canvas", [])
+
+        inserted_user_count = 0
+        inserted_canvas_count = 0
+
+        for user in user_data:
+            if UserService.save(**user):
+                inserted_user_count += 1
+            else:
+                logging.warning(f"插入用户失败: {user.get('id')}")
+
+        for canvas in canvas_data:
+            if UserCanvasService.save(**canvas):
+                inserted_canvas_count += 1
+            else:
+                logging.warning(f"插入Canvas失败: {canvas.get('id')}")
+
+        logging.info(f"插入完成，成功用户数: {inserted_user_count}, Canvas数: {inserted_canvas_count}")
+        return True
+
+    except Exception as e:
+        logging.error(f"读取或插入 JSON 数据出错: {e}")
+        return False
+
+
+def check_and_init_sample_data():
+    """
+    检查数据库中是否有用户和canvas数据，如果都为空则执行示例数据初始化
+    """
+    try:
+        # 检查user表是否为空
+        user_count = User.select().count()
+        logging.info(f"当前用户数量: {user_count}")
+        
+        # 检查user_canvas表是否为空  
+        canvas_count = UserCanvas.select().count()
+        logging.info(f"当前Canvas数量: {canvas_count}")
+        
+        # 如果两个表都为空，执行初始化JSON
+        if user_count == 0 and canvas_count == 0:
+            logging.info("检测到user和user_canvas表都为空，开始执行示例数据初始化...")
+            
+            # JSON 文件路径
+            json_file_path = os.path.join(get_project_base_directory(), "conf", "小瑞.json")
+
+            if os.path.exists(json_file_path):
+                logging.info(f"找到JSON初始化文件: {json_file_path}")
+                success = insert_sample_data_from_json(json_file_path)
+
+                if success:
+                    logging.info("示例数据初始化完成")
+                    # 再次检查数据是否成功插入
+                    new_user_count = User.select().count()
+                    new_canvas_count = UserCanvas.select().count()
+                    logging.info(f"初始化后 - 用户数量: {new_user_count}, Canvas数量: {new_canvas_count}")
+                else:
+                    logging.error("示例数据初始化失败")
+            else:
+                logging.warning(f"未找到JSON初始化文件: {json_file_path}")
+                
+        elif user_count == 0:
+            logging.info("检测到用户表为空，但Canvas表有数据，跳过示例数据初始化")
+        elif canvas_count == 0:
+            logging.info("检测到Canvas表为空，但用户表有数据，跳过示例数据初始化") 
+        else:
+            logging.info("用户表和Canvas表都有数据，跳过示例数据初始化")
+            
+    except Exception as e:
+        logging.error(f"检查和初始化示例数据时出错: {e}")
+
+
 def init_web_data():
     start_time = time.time()
 
@@ -173,6 +261,10 @@ def init_web_data():
     #    init_superuser()
 
     add_graph_templates()
+    
+    # 添加示例数据检查和初始化
+    check_and_init_sample_data()
+    
     logging.info("init web data success:{}".format(time.time() - start_time))
 
 
