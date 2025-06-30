@@ -58,7 +58,11 @@ def sync_users_from_json():
     如果用户不存在则创建，如果存在则更新密码
     """
     try:
-        json_file_path = "/Users/bj/knowledge-base/user-data.json"
+        # 动态获取JSON文件路径，支持环境变量配置
+        json_file_path = os.environ.get('USER_DATA_JSON_PATH')
+        if not json_file_path:
+            # 如果环境变量未设置，使用默认路径
+            json_file_path = os.path.join(get_project_base_directory(), "user-data.json")
         
         # 检查文件是否存在
         if not os.path.exists(json_file_path):
