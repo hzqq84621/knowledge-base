@@ -1,5 +1,5 @@
 {
-  "id": 11,
+  "id": 3,
   "title": "精准问答型",
   "description": "一个精准问答型的智能助手，可以从知识库中检索相关信息进行回答。",
   "canvas_type": "chatbot",
