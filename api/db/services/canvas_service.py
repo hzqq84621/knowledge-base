@@ -40,7 +40,7 @@ class UserCanvasService(CommonService):
     @DB.connection_context()
     def get_list(cls, tenant_id,
                  page_number, items_per_page, orderby, desc, id, title):
-        user_id=current_user.id
+        user_id=tenant_id
         permitted_canvas_ids = UserCanvasPermission.select(UserCanvasPermission.user_canvas_id) \
             .where(UserCanvasPermission.user_id == user_id)
 
