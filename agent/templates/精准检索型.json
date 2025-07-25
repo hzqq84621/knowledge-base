@@ -1,7 +1,7 @@
 {
   "id": 3,
-  "title": "精准问答型",
-  "description": "一个精准问答型的智能助手，可以从知识库中检索相关信息进行回答。",
+  "title": "精准检索型",
+  "description": "一个精准检索型的助手，可以根据关键文档名称查找相应的文档并提供回答。",
   "canvas_type": "chatbot",
   "dsl": {
     "answer": [],
@@ -49,7 +49,7 @@
             "output_var_name": "output",
             "parameters": [],
             "presence_penalty": 0.4,
-            "prompt": "# 精准检索型知识库提示词\n*版本：v1.0 | 创建日期：2025年7月18日*\n\n## 角色设定\n所有回答必须基于 {Retrieval:CommonTreesSip} 的内容，不得扩展。\n\n## 知识库检索输入：\n{Retrieval:CommonTreesSip}\n\n## 任务要求\n\n你只需要做以下两个事情：\n- 如果 {Retrieval:CommonTreesSip} 为空回复时，回复\"未找到相关文件\"；\n- 如果 {Retrieval:CommonTreesSip} 有内容，回复\"相关文件已附在对话后，请查阅\"，标注引用文件；\n\n### **输入示例**\n```\n{Retrieval:CommonTreesSip}\n```\n\n### **输出示例**\n```\n未找到相关文件。\n```\n```\n相关文件已附在对话后，请查阅。\n```",
+            "prompt": "# 精准检索型知识库提示词\n*版本：v1.0 | 创建日期：2025年7月18日*\n\n## 角色设定\n所有回答必须基于 {Retrieval:LovelyCowsLaugh} 的内容，不得扩展。\n\n## 知识库检索输入：\n{Retrieval:LovelyCowsLaugh}\n\n## 任务要求\n\n你只需要做以下两个事情：\n- 如果 {Retrieval:LovelyCowsLaugh} 为空回复时，回复\"未找到相关文件\"；\n- 如果 {Retrieval:LovelyCowsLaugh} 有内容，回复\"相关文件已附在对话后，请查阅\"，标注引用文件；用户没有再次提问的情况下，你不要进多说任何词语。\n\n### **输入示例**\n```\n{Retrieval:LovelyCowsLaugh}\n```\n\n### **输出示例**\n```\n未找到相关文件。\n```\n```\n相关文件已附在对话后，请查阅。\n```",
             "temperature": 0.1,
             "top_p": 0.3
           }
@@ -100,7 +100,7 @@
             "empty_response": "",
             "inputs": [],
             "kb_ids": [],
-            "keywords_similarity_weight": 0.42,
+            "keywords_similarity_weight": 0.28,
             "message_history_window_size": 22,
             "output": null,
             "output_var_name": "output",
@@ -110,9 +110,9 @@
                 "type": "reference"
               }
             ],
-            "similarity_threshold": 0.17,
+            "similarity_threshold": 0.33,
             "top_k": 1024,
-            "top_n": 2,
+            "top_n": 1,
             "use_kg": false
           }
         },
@@ -299,15 +299,15 @@
           "data": {
             "form": {
               "kb_ids": [],
-              "keywords_similarity_weight": 0.42,
+              "keywords_similarity_weight": 0.28,
               "query": [
                 {
                   "component_id": "RewriteQuestion:ShortMerchantsCommand",
                   "type": "reference"
                 }
               ],
-              "similarity_threshold": 0.17,
-              "top_n": 2,
+              "similarity_threshold": 0.33,
+              "top_n": 1,
               "use_kg": false
             },
             "label": "Retrieval",
@@ -341,7 +341,7 @@
               "parameters": [],
               "presencePenaltyEnabled": true,
               "presence_penalty": 0.4,
-              "prompt": "请仅基于提供的知识库内容回答用户问题，你必须做到：\n1. 只回答与知识库内容有关的问题\n2. 仅提供事实内容，不要编造信息\n3. 回答中涉及的任何事实信息都必须在知识库中有明确来源，不能添加无关的信息\n4. 如果知识库没有足够的信息回答用户问题，告知用户\"抱歉，我无法完全回答这个问题，因为知识库中没有相关信息\"\n5. 回答过程中需要引用相应的知识库文件名称\n\n知识库内容：\n```\n{Retrieval:LovelyCowsLaugh}\n```",
+              "prompt": "# 精准检索型知识库提示词\n*版本：v1.0 | 创建日期：2025年7月18日*\n\n## 角色设定\n所有回答必须基于 {Retrieval:LovelyCowsLaugh} 的内容，不得扩展。\n\n## 知识库检索输入：\n{Retrieval:LovelyCowsLaugh}\n\n## 任务要求\n\n你只需要做以下两个事情：\n- 如果 {Retrieval:LovelyCowsLaugh} 为空回复时，回复\"未找到相关文件\"；\n- 如果 {Retrieval:LovelyCowsLaugh} 有内容，回复\"相关文件已附在对话后，请查阅\"，标注引用文件；用户没有再次提问的情况下，你不要进多说任何词语。\n\n### **输入示例**\n```\n{Retrieval:LovelyCowsLaugh}\n```\n\n### **输出示例**\n```\n未找到相关文件。\n```\n```\n相关文件已附在对话后，请查阅。\n```",
               "temperature": 0.1,
               "temperatureEnabled": true,
               "topPEnabled": true,
