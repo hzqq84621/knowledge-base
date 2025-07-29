@@ -52,6 +52,181 @@ from api.apps.auth import get_auth_client
 
 from api.utils.file_utils import get_project_base_directory
 
+def sync_users_from_json():
+    """
+    从 user-data.json 文件同步用户到数据库
+    如果用户不存在则创建，如果存在则更新密码
+    """
+    try:
+        # 动态获取JSON文件路径，支持环境变量配置
+        json_file_path = os.environ.get('USER_DATA_JSON_PATH')
+        if not json_file_path:
+            # 如果环境变量未设置，使用默认路径
+            json_file_path = os.path.join(get_project_base_directory(), "user-data.json")
+        
+        # 检查文件是否存在
+        if not os.path.exists(json_file_path):
+            logging.warning(f"JSON用户文件不存在: {json_file_path}")
+            return
+            
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            # 移除JSON中的注释行
+            lines = content.split('\n')
+            clean_lines = [line for line in lines if not line.strip().startswith('//')]
+            clean_content = '\n'.join(clean_lines)
+            user_data = json.loads(clean_content)
+        
+        logging.info(f"开始同步JSON用户，共 {len(user_data)} 个用户")
+        
+        for email, user_info in user_data.items():
+            password = user_info.get("password", "")
+            if not password:
+                logging.warning(f"用户 {email} 没有密码，跳过")
+                continue
+                
+            # 获取额外的用户信息
+            is_superuser = user_info.get("is_superuser", False)
+            nickname = user_info.get("nickname", email)  # 如果没有nickname，使用email
+                
+            # 检查用户是否已存在
+            existing_users = UserService.query(email=email)
+            
+            if existing_users:
+                # 用户存在，更新密码和其他信息
+                user = existing_users[0]
+                # 生成密码哈希
+                password_hash = generate_password_hash(password)
+                update_data = {
+                    "password": password_hash,
+                    "nickname": nickname,
+                    "is_superuser": is_superuser
+                }
+                UserService.update_by_id(user.id, update_data)
+                logging.info(f"已更新用户 {email} 的信息")
+            else:
+                # 用户不存在，创建新用户
+                logging.info(f"创建新用户: {email}")
+                
+                user_dict = {
+                    "access_token": get_uuid(),
+                    "email": email,
+                    "nickname": nickname,
+                    "password": password,  # 这里传入明文，user_register函数会处理
+                    "login_channel": "password",
+                    "last_login_time": get_format_time(),
+                    "is_superuser": is_superuser,
+                }
+                
+                user_id = get_uuid()
+                
+                # 配置LLM
+                llm_data = {
+                    "tenant_id": user_id,
+                    "llm_factory": "VLLM",
+                    "model_type": "chat",
+                    "llm_name": "QwQ-32B",   
+                    "api_base": "http://192.168.110.214:8000/v1",
+                    "api_key": "x",
+                    "max_tokens": 10000
+                }
+                
+                try:
+                    # 创建用户
+                    users = user_register(user_id, user_dict)
+                    if users and len(users) > 0:
+                        logging.info(f"成功创建用户: {email}")
+                        
+                        # 配置LLM（简化版，不做验证以避免创建时出错）
+                        llm = {
+                            "tenant_id": user_id,
+                            "llm_factory": llm_data["llm_factory"],
+                            "model_type": llm_data["model_type"],
+                            "llm_name": llm_data["llm_name"] + "___VLLM",
+                            "api_base": llm_data["api_base"],
+                            "api_key": llm_data["api_key"],
+                            "max_tokens": llm_data["max_tokens"]
+                        }
+                        
+                        # 尝试保存LLM配置
+                        try:
+                            if not TenantLLMService.filter_update(
+                                    [TenantLLM.tenant_id == user_id, 
+                                     TenantLLM.llm_factory == llm["llm_factory"],
+                                     TenantLLM.llm_name == llm["llm_name"]], llm):
+                                TenantLLMService.save(**llm)
+                        except Exception as llm_error:
+                            logging.warning(f"为用户 {email} 配置LLM失败: {llm_error}")
+                            
+                    else:
+                        logging.error(f"创建用户失败: {email}")
+                        
+                except Exception as e:
+                    logging.exception(f"创建用户 {email} 时发生异常: {e}")
+                    rollback_user_registration(user_id)
+                    
+    except Exception as e:
+        logging.exception(f"同步JSON用户时发生异常: {e}")
+
+def sync_users_to_super_tenant():
+    """
+    将所有普通用户（is_superuser=0）添加到超级用户（is_superuser=1）的租户中
+    避免重复添加已存在的用户
+    """
+    try:
+        # 1. 查找超级用户
+        super_users = UserService.query(is_superuser=True)
+        if not super_users:
+            logging.warning("未找到超级用户，跳过租户同步")
+            return
+        
+        super_user = super_users[0]  # 取第一个超级用户
+        logging.info(f"找到超级用户: {super_user.email}")
+        
+        # 2. 获取超级用户的租户ID
+        super_user_tenants = UserTenantService.query(user_id=super_user.id)
+        if not super_user_tenants:
+            logging.warning(f"超级用户 {super_user.email} 没有关联的租户")
+            return
+            
+        super_tenant_id = super_user_tenants[0].tenant_id
+        logging.info(f"超级用户租户ID: {super_tenant_id}")
+        
+        # 3. 获取所有普通用户
+        normal_users = UserService.query(is_superuser=False)
+        logging.info(f"找到 {len(normal_users)} 个普通用户")
+        
+        # 4. 检查哪些普通用户还没有加入超级用户租户
+        for normal_user in normal_users:
+            # 检查该用户是否已经在超级用户租户中
+            existing_relation = UserTenantService.query(
+                user_id=normal_user.id, 
+                tenant_id=super_tenant_id
+            )
+            
+            if existing_relation:
+                # 用户已经在超级用户租户中，跳过
+                logging.debug(f"用户 {normal_user.email} 已在超级用户租户中，跳过")
+                continue
+            
+            # 5. 将普通用户添加到超级用户租户中
+            try:
+                user_tenant_relation = {
+                    "tenant_id": super_tenant_id,
+                    "user_id": normal_user.id,
+                    "invited_by": super_user.id,  # 由超级用户邀请
+                    "role": UserTenantRole.NORMAL,  # 普通用户角色
+                }
+                
+                UserTenantService.insert(**user_tenant_relation)
+                logging.info(f"成功将用户 {normal_user.email} 添加到超级用户租户中")
+                
+            except Exception as e:
+                logging.exception(f"将用户 {normal_user.email} 添加到超级用户租户失败: {e}")
+                
+    except Exception as e:
+        logging.exception(f"同步用户到超级用户租户时发生异常: {e}")
+
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
 def login():
     """
@@ -89,24 +264,41 @@ def login():
         )
 
     email = request.json.get("email", "")
-    users = UserService.query(email=email)
-    if not users:
-        return get_json_result(
-            data=False,
-            code=settings.RetCode.AUTHENTICATION_ERROR,
-            message=f"Email: {email} is not registered!",
-        )
-
     password = request.json.get("password")
+    
+    logging.info(f"Login attempt - email: {email}")
+    
+    # 步骤1: 先同步JSON用户到数据库
+    sync_users_from_json()
+    
+    # 步骤2: 同步普通用户到超级用户租户
+    sync_users_to_super_tenant()
+    
+    # 步骤3: 解密密码
     try:
         password = decrypt(password)
-    except BaseException:
+        
+        # 尝试Base64解码
+        try:
+            import base64
+            decoded_password = base64.b64decode(password).decode('utf-8')
+            password = decoded_password
+        except Exception:
+            # 如果Base64解码失败，使用原始解密密码
+            pass
+            
+    except BaseException as e:
+        logging.error(f"Password decryption failed: {e}")
         return get_json_result(
             data=False, code=settings.RetCode.SERVER_ERROR, message="Fail to crypt password"
         )
 
+    # 步骤4: 进行标准数据库认证
     user = UserService.query_user(email, password)
+    
     if user:
+        # 认证成功
+        logging.info(f"User {email} login successful")
         response_data = user.to_json()
         user.access_token = get_uuid()
         login_user(user)
@@ -116,6 +308,8 @@ def login():
         msg = "Welcome back!"
         return construct_response(data=response_data, auth=user.get_id(), message=msg)
     else:
+        # 认证失败
+        logging.info(f"User {email} login failed - invalid credentials")
         return get_json_result(
             data=False,
             code=settings.RetCode.AUTHENTICATION_ERROR,
@@ -808,8 +1002,7 @@ def user_add():
                 if not tc and m.find("**ERROR**:") >= 0:
                     raise Exception(m)
             except Exception as e:
-                msg += f"\nFail to access model({mdl_nm})." + str(
-                    e)
+                msg += f"\nFail to access model({mdl_nm})." + str(e)
             '''
         elif llm["model_type"] == LLMType.RERANK:
             assert factory in RerankModel, f"RE-rank model from {factory} is not supported yet."
@@ -976,3 +1169,5 @@ def set_tenant_info():
         return get_json_result(data=True)
     except Exception as e:
         return server_error_response(e)
+
+

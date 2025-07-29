@@ -33,12 +33,16 @@ services:
       - ../history_data_agent:/ragflow/history_data_agent
       - ./service_conf.yaml.template:/ragflow/conf/service_conf.yaml.template
       - ./entrypoint.sh:/ragflow/entrypoint.sh
+      # 挂载用户数据JSON文件 - 使用.env文件中配置的路径
+      - ${USER_DATA_JSON_FILE}:/ragflow/conf/user-data.json:ro
 
     env_file: .env
     environment:
       - TZ=${TIMEZONE}
       - HF_ENDPOINT=${HF_ENDPOINT}
       - MACOS=${MACOS}
+      # 设置用户数据JSON文件路径环境变量
+      - USER_DATA_JSON_PATH=/ragflow/conf/user-data.json
     networks:
       - ragflow
     restart: on-failure

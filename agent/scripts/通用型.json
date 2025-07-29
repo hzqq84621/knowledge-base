@@ -20,7 +20,7 @@
             "message_history_window_size": 22,
             "output": null,
             "output_var_name": "output",
-            "prologue": "你好！ 有什么可以帮您？",
+            "prologue": "你好！有什么可以帮您？",
             "query": []
           }
         },
@@ -47,36 +47,6 @@
         "upstream": [
           "begin",
           "Generate:NewHorsesBuy"
-        ]
-      },
-      "Generate:NewHorsesBuy": {
-        "downstream": [
-          "Answer:LateCamerasSearch"
-        ],
-        "obj": {
-          "component_name": "Generate",
-          "inputs": [],
-          "output": null,
-          "params": {
-            "cite": true,
-            "debug_inputs": [],
-            "frequency_penalty": 0.7,
-            "inputs": [],
-            "llm_id": "qwen-max@Tongyi-Qianwen",
-            "max_tokens": 256,
-            "message_history_window_size": 12,
-            "output": null,
-            "output_var_name": "output",
-            "parameters": [],
-            "presence_penalty": 0.4,
-            "prompt": "Task: Please answer the question based on content of knowledge base. \n\nRequirements & restrictions:\n  -  DO NOT make things up when all knowledge base content is irrelevant to the question. \n  - Answers need to consider chat history.\n \n\n      Knowledge base content is as following:\n       {Retrieval:RudeClocksMake}\n      The above is the content of knowledge base.",
-            "query": [],
-            "temperature": 0.1,
-            "top_p": 0.3
-          }
-        },
-        "upstream": [
-          "Retrieval:RudeClocksMake"
         ]
       },
       "RewriteQuestion:SmartSingersAttend": {
@@ -118,27 +88,54 @@
           "output": null,
           "params": {
             "debug_inputs": [],
-            "empty_response": "",
             "inputs": [],
             "kb_ids": [],
             "keywords_similarity_weight": 0.3,
-            "message_history_window_size": 22,
             "output": null,
             "output_var_name": "output",
             "query": [
               {
-                "component_id": "Answer:LateCamerasSearch",
+                "component_id": "RewriteQuestion:SmartSingersAttend",
                 "type": "reference"
               }
             ],
             "similarity_threshold": 0.14,
-            "top_k": 1024,
             "top_n": 3,
             "use_kg": false
           }
         },
         "upstream": [
           "RewriteQuestion:SmartSingersAttend"
+        ]
+      },
+      "Generate:NewHorsesBuy": {
+        "downstream": [
+          "Answer:LateCamerasSearch"
+        ],
+        "obj": {
+          "component_name": "Generate",
+          "inputs": [],
+          "output": null,
+          "params": {
+            "cite": true,
+            "debug_inputs": [],
+            "frequency_penalty": 0.7,
+            "inputs": [],
+            "llm_id": "qwen-max@Tongyi-Qianwen",
+            "max_tokens": 256,
+            "message_history_window_size": 12,
+            "output": null,
+            "output_var_name": "output",
+            "parameters": [],
+            "presence_penalty": 0.4,
+            "prompt": "# 通用型知识库检索提示词\n*版本：v1.0 | 创建日期：2025年7月18日*\n\n## 任务说明\n请基于知识库内容回答用户问题。\n\n## 核心要求与限制\n- **真实性原则**：当知识库内容与问题无关时，不得编造信息\n- **上下文一致性**：回答需要考虑聊天历史记录\n- **准确性要求**：严格基于知识库内容进行回答，避免主观推测\n\n## 回答规范\n### 内容要求\n- **结构清晰**：回答结构清晰，逻辑递进，使用有序列表和标题组织内容\n- **语言风格**：简明扼要，确保用户易于理解\n- **引用标准**：明确标注信息来源，区分知识库内容与一般常识\n\n### 处理方式\n- **相关内容**：从知识库中提取相关信息，进行整理和归纳\n- **无关内容**：明确告知用户知识库中没有相关信息\n- **部分相关**：提供知识库中的相关部分，说明覆盖范围\n\n## 知识库内容\n以下是知识库的内容：\n{Retrieval:RudeClocksMake}\n以上为知识库内容。\n\n## 回答模板\n\n### 当知识库有相关内容时：\n根据知识库内容，关于您的问题：\n\n[基于知识库内容的详细回答]\n\n**信息来源**：知识库相关资料\n\n### 当知识库无相关内容时：\n很抱歉，知识库中没有找到与您问题相关的信息。建议您：\n1. 重新描述问题或使用不同的关键词\n2. 确认问题是否在知识库覆盖范围内\n\n### 当知识库部分相关时：\n根据知识库内容，我可以为您提供以下相关信息：\n\n[基于知识库的部分回答]\n\n**说明**：知识库中仅包含部分相关信息，如需更全面的答案，可能需要补充其他资料。",
+            "query": [],
+            "temperature": 0.1,
+            "top_p": 0.3
+          }
+        },
+        "upstream": [
+          "Retrieval:RudeClocksMake"
         ]
       }
     },
@@ -219,10 +216,10 @@
         {
           "data": {
             "form": {
-              "prologue": "你好！ 有什么可以帮您？"
+              "prologue": "你好！有什么可以帮您？"
             },
             "label": "Begin",
-            "name": "begin"
+            "name": "开始"
           },
           "dragging": false,
           "id": "begin",
@@ -231,8 +228,8 @@
             "width": 200
           },
           "position": {
-            "x": -642.2041799252354,
-            "y": 418.66469343241516
+            "x": -345.1229490082665,
+            "y": 161.91151125720583
           },
           "selected": false,
           "sourcePosition": "left",
@@ -243,7 +240,7 @@
           "data": {
             "form": {},
             "label": "Answer",
-            "name": "对话_0"
+            "name": "对话"
           },
           "dragging": false,
           "id": "Answer:LateCamerasSearch",
@@ -252,50 +249,13 @@
             "width": 200
           },
           "position": {
-            "x": -319.226967990176,
-            "y": 435.9645382163219
+            "x": -16.571238717072973,
+            "y": 376.8648834083045
           },
           "selected": false,
           "sourcePosition": "right",
           "targetPosition": "left",
           "type": "logicNode"
-        },
-        {
-          "data": {
-            "form": {
-              "cite": true,
-              "frequencyPenaltyEnabled": true,
-              "frequency_penalty": 0.7,
-              "llm_id": "qwen-max@Tongyi-Qianwen",
-              "maxTokensEnabled": false,
-              "max_tokens": 256,
-              "message_history_window_size": 12,
-              "parameters": [],
-              "presencePenaltyEnabled": true,
-              "presence_penalty": 0.4,
-              "prompt": "Task: Please answer the question based on content of knowledge base. \n\nRequirements & restrictions:\n  -  DO NOT make things up when all knowledge base content is irrelevant to the question. \n  - Answers need to consider chat history.\n \n\n      Knowledge base content is as following:\n       {Retrieval:RudeClocksMake}\n      The above is the content of knowledge base.",
-              "temperature": 0.1,
-              "temperatureEnabled": true,
-              "topPEnabled": true,
-              "top_p": 0.3
-            },
-            "label": "Generate",
-            "name": "生成回答_1"
-          },
-          "dragging": false,
-          "id": "Generate:NewHorsesBuy",
-          "measured": {
-            "height": 102,
-            "width": 200
-          },
-          "position": {
-            "x": -24.997879231796816,
-            "y": 109.0903220902255
-          },
-          "selected": false,
-          "sourcePosition": "right",
-          "targetPosition": "left",
-          "type": "generateNode"
         },
         {
           "data": {
@@ -325,8 +285,8 @@
             "width": 200
           },
           "position": {
-            "x": -23.00515535852884,
-            "y": 415.3460620744836
+            "x": 250,
+            "y": 200
           },
           "selected": false,
           "sourcePosition": "right",
@@ -340,7 +300,7 @@
               "keywords_similarity_weight": 0.3,
               "query": [
                 {
-                  "component_id": "Answer:LateCamerasSearch",
+                  "component_id": "RewriteQuestion:SmartSingersAttend",
                   "type": "reference"
                 }
               ],
@@ -349,22 +309,59 @@
               "use_kg": false
             },
             "label": "Retrieval",
-            "name": "知识检索_0"
+            "name": "知识检索"
           },
           "dragging": false,
           "id": "Retrieval:RudeClocksMake",
           "measured": {
-            "height": 65,
+            "height": 106,
             "width": 200
           },
           "position": {
-            "x": 316.24121906617927,
-            "y": 410.8098771562748
+            "x": 348.32974574114917,
+            "y": 342.8358968635691
           },
-          "selected": true,
+          "selected": false,
           "sourcePosition": "right",
           "targetPosition": "left",
           "type": "retrievalNode"
+        },
+        {
+          "data": {
+            "form": {
+              "cite": true,
+              "frequencyPenaltyEnabled": true,
+              "frequency_penalty": 0.7,
+              "llm_id": "qwen-max@Tongyi-Qianwen",
+              "maxTokensEnabled": false,
+              "max_tokens": 256,
+              "message_history_window_size": 12,
+              "parameters": [],
+              "presencePenaltyEnabled": true,
+              "presence_penalty": 0.4,
+              "prompt": "# 通用型知识库检索提示词\n*版本：v1.0 | 创建日期：2025年7月18日*\n\n## 任务说明\n请基于知识库内容回答用户问题。\n\n## 核心要求与限制\n- **真实性原则**：当知识库内容与问题无关时，不得编造信息\n- **上下文一致性**：回答需要考虑聊天历史记录\n- **准确性要求**：严格基于知识库内容进行回答，避免主观推测\n\n## 回答规范\n### 内容要求\n- **结构清晰**：回答结构清晰，逻辑递进，使用有序列表和标题组织内容\n- **语言风格**：简明扼要，确保用户易于理解\n- **引用标准**：明确标注信息来源，区分知识库内容与一般常识\n\n### 处理方式\n- **相关内容**：从知识库中提取相关信息，进行整理和归纳\n- **无关内容**：明确告知用户知识库中没有相关信息\n- **部分相关**：提供知识库中的相关部分，说明覆盖范围\n\n## 知识库内容\n以下是知识库的内容：\n{Retrieval:RudeClocksMake}\n以上为知识库内容。\n\n## 回答模板\n\n### 当知识库有相关内容时：\n根据知识库内容，关于您的问题：\n\n[基于知识库内容的详细回答]\n\n**信息来源**：知识库相关资料\n\n### 当知识库无相关内容时：\n很抱歉，知识库中没有找到与您问题相关的信息。建议您：\n1. 重新描述问题或使用不同的关键词\n2. 确认问题是否在知识库覆盖范围内\n\n### 当知识库部分相关时：\n根据知识库内容，我可以为您提供以下相关信息：\n\n[基于知识库的部分回答]\n\n**说明**：知识库中仅包含部分相关信息，如需更全面的答案，可能需要补充其他资料。",
+              "temperature": 0.1,
+              "temperatureEnabled": true,
+              "topPEnabled": true,
+              "top_p": 0.3
+            },
+            "label": "Generate",
+            "name": "生成回答"
+          },
+          "dragging": false,
+          "id": "Generate:NewHorsesBuy",
+          "measured": {
+            "height": 102,
+            "width": 200
+          },
+          "position": {
+            "x": 121.18781978884462,
+            "y": 17.30325820035405
+          },
+          "selected": false,
+          "sourcePosition": "right",
+          "targetPosition": "left",
+          "type": "generateNode"
         }
       ]
     },

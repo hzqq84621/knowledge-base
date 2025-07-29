@@ -18,8 +18,8 @@ import time
 import traceback
 from uuid import uuid4
 from agent.canvas import Canvas
-from api.db import TenantPermission
-from api.db.db_models import DB, CanvasTemplate, User, UserCanvas, API4Conversation,UserCanvasPermission
+from api.db import TenantPermission, UserTenantRole, StatusEnum
+from api.db.db_models import DB, CanvasTemplate, User, UserCanvas, API4Conversation,UserCanvasPermission, UserTenant
 from api.db.services.api_service import API4ConversationService
 from api.db.services.common_service import CommonService
 from api.db.services.conversation_service import structure_answer
@@ -40,7 +40,7 @@ class UserCanvasService(CommonService):
     @DB.connection_context()
     def get_list(cls, tenant_id,
                  page_number, items_per_page, orderby, desc, id, title):
-        user_id=current_user.id
+        user_id=tenant_id
         permitted_canvas_ids = UserCanvasPermission.select(UserCanvasPermission.user_canvas_id) \
             .where(UserCanvasPermission.user_id == user_id)
 
@@ -126,18 +126,36 @@ class UserCanvasService(CommonService):
             User.avatar.alias('tenant_avatar'),
             cls.model.update_time
         ]
+        # 修改权限查询逻辑，确保在共享租户中，只有OWNER角色创建的team权限canvas对所有成员可见
+        # 构建复杂的查询条件
+        # 情况1：用户自己创建的canvas
+        user_own_condition = (cls.model.user_id == user_id)
+        
+        # 情况2：租户内OWNER角色创建的team权限canvas
+        # 先创建子查询来找到每个租户的OWNER用户
+        owner_subquery = UserTenant.select(UserTenant.user_id).where(
+            (UserTenant.tenant_id.in_(joined_tenant_ids)) &
+            (UserTenant.role == UserTenantRole.OWNER) &
+            (UserTenant.status == StatusEnum.VALID.value)
+        )
+        
+        shared_condition = (
+            (cls.model.user_id.in_(joined_tenant_ids)) &  # 同一租户下的
+            (cls.model.permission == TenantPermission.TEAM.value) &  # 权限为team的
+            (cls.model.user_id.in_(owner_subquery))  # 创建者必须是OWNER角色
+        )
+        
+        # 组合两种情况
+        permission_condition = user_own_condition | shared_condition
+        
         if keywords:
             angents = cls.model.select(*fields).join(User, on=(cls.model.user_id == User.id)).where(
-                ((cls.model.user_id.in_(joined_tenant_ids) & (cls.model.permission == 
-                                                                TenantPermission.TEAM.value)) | (
-                    cls.model.user_id == user_id)),
+                permission_condition,
                 (fn.LOWER(cls.model.title).contains(keywords.lower()))
             )
         else:
             angents = cls.model.select(*fields).join(User, on=(cls.model.user_id == User.id)).where(
-                ((cls.model.user_id.in_(joined_tenant_ids) & (cls.model.permission == 
-                                                                TenantPermission.TEAM.value)) | (
-                    cls.model.user_id == user_id))
+                permission_condition
             )
         if desc:
             angents = angents.order_by(cls.model.getter_by(orderby).desc())

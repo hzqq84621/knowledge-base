@@ -634,11 +634,38 @@ const AgentChatContainer = ({
                         sendLoading={
                           sendLoading && messages.length - 1 === i && !done
                         }
-                        reference={
-                          messageReferenceMap.has(message.id)
+                        reference={(() => {
+                          let ref = messageReferenceMap.has(message.id)
                             ? messageReferenceMap.get(message.id)
-                            : message.reference || []
-                        }
+                            : message.reference || [];
+
+                          // 过滤None值和无效引用，确保返回正确的IReference格式
+                          if (Array.isArray(ref)) {
+                            const validRefs = ref.filter(
+                              (item) =>
+                                item !== null &&
+                                item !== undefined &&
+                                item !== '' &&
+                                typeof item === 'object' &&
+                                Object.keys(item).length > 0,
+                            );
+                            return validRefs.length > 0
+                              ? { doc_aggs: validRefs, chunks: [], total: 0 }
+                              : { doc_aggs: [], chunks: [], total: 0 };
+                          }
+
+                          // 如果ref已经是IReference格式
+                          if (ref && typeof ref === 'object' && ref.doc_aggs) {
+                            return ref;
+                          }
+
+                          // 如果是单个对象，转换为IReference格式
+                          if (ref && typeof ref === 'object' && ref !== null) {
+                            return { doc_aggs: [ref], chunks: [], total: 0 };
+                          }
+
+                          return { doc_aggs: [], chunks: [], total: 0 };
+                        })()}
                         // 添加调试信息，帮助排查引用数据
                         data-has-reference={
                           !!message.reference ||

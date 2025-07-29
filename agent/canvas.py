@@ -123,7 +123,19 @@ class Canvas:
         self.history = self.dsl["history"]
         self.messages = self.dsl["messages"]
         self.answer = self.dsl["answer"]
-        self.reference = self.dsl["reference"]
+        
+        # 修复：处理reference数组中的None值，保持数组长度一致
+        raw_reference = self.dsl.get("reference", [])
+        if isinstance(raw_reference, list):
+            self.reference = []
+            for ref in raw_reference:
+                if ref is None or ref == "" or (isinstance(ref, list) and len(ref) == 0):
+                    self.reference.append([])  # 用空数组替换None值
+                else:
+                    self.reference.append(ref)
+        else:
+            self.reference = []
+        
         self._embed_id = self.dsl.get("embed_id", "")
 
     def __str__(self):

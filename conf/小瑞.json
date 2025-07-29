@@ -1,0 +1,27 @@
+{
+    "user": [
+    {
+      "id": "2841979e533911f09eedbbca5ec85fab",
+      "create_time": 1751016540304,
+      "create_date": "2025-06-27 17:29:00",
+      "update_time": 1751268695867,
+      "update_date": "2025-06-30 15:31:35",
+      "access_token": "",
+      "nickname": "瑞元",
+      "password": "scrypt:32768:8:1$cpb1WPodCYtbPBIN$9fa4ca2578420a0092ca9b33a9be5219772ed6cb3dc8e7fdc93224767702232d0cb7c379cc9e644f1fcf34edd28c07b81cf3efe913e0af699136c57518401946",
+      "email": "ruiyuan",
+      "avatar": null,
+      "language": "Chinese",
+      "color_schema": "Bright",
+      "timezone": "UTC+8\tAsia/Shanghai",
+      "last_login_time": "2025-06-27 17:29:00",
+      "is_authenticated": "1",
+      "is_active": "1",
+      "is_anonymous": "0",
+      "login_channel": "password",
+      "status": "1",
+      "is_superuser": 1
+    }
+  ]
+
+}

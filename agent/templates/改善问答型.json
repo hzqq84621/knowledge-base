@@ -1,254 +1,286 @@
 {
-  "id": 17,
-  "title": "改善问答型",
-  "description": "一个能主动改善回答效果的智能助手，根据用户反馈不断调整。",
-  "canvas_type": "chatbot",
-  "dsl": {
-    "answer": [],
-    "components": {
-      "Answer:SoreGrandmasCollide": {
-        "downstream": [
-          "Feedback:BlockRiversKnow"
-        ],
-        "obj": {
-          "component_name": "Answer",
-          "inputs": [],
-          "output": null,
-          "params": {
-            "debug_inputs": [],
-            "inputs": [],
-            "message_history_window_size": 22,
-            "output": null,
-            "output_var_name": "output",
-            "post_answers": [],
-            "query": []
-          }
+    "id": 2,
+    "title": "改善问答型",
+    "description": "专业的质量管理问答助手，能够基于历史质量事件知识库提供专业建议和解决方案。支持问题优化和知识检索，为质量管理提供有效支持。",
+    "canvas_type": "chatbot",
+    "dsl": {
+        "answer": [],
+        "components": {
+            "begin": {
+                "downstream": [
+                    "Answer:LateCamerasSearch"
+                ],
+                "obj": {
+                    "component_name": "Begin",
+                    "inputs": [],
+                    "output": null,
+                    "params": {
+                        "debug_inputs": [],
+                        "inputs": [],
+                        "message_history_window_size": 22,
+                        "output": null,
+                        "output_var_name": "output",
+                        "prologue": "你好！有什么可以帮您？",
+                        "query": []
+                    }
+                },
+                "upstream": []
+            },
+            "Answer:LateCamerasSearch": {
+                "downstream": [
+                    "RewriteQuestion:SmartSingersAttend"
+                ],
+                "obj": {
+                    "component_name": "Answer",
+                    "inputs": [],
+                    "output": null,
+                    "params": {
+                        "debug_inputs": [],
+                        "inputs": [],
+                        "message_history_window_size": 22,
+                        "output": null,
+                        "output_var_name": "output",
+                        "post_answers": [],
+                        "query": []
+                    }
+                },
+                "upstream": [
+                    "begin",
+                    "Generate:NewHorsesBuy"
+                ]
+            },
+            "RewriteQuestion:SmartSingersAttend": {
+                "downstream": [
+                    "Retrieval:RudeClocksMake"
+                ],
+                "obj": {
+                    "component_name": "RewriteQuestion",
+                    "inputs": [],
+                    "output": null,
+                    "params": {
+                        "debug_inputs": [],
+                        "frequency_penalty": 0.7,
+                        "inputs": [],
+                        "language": "",
+                        "llm_id": "qwen-max@Tongyi-Qianwen",
+                        "max_tokens": 256,
+                        "message_history_window_size": 12,
+                        "output": null,
+                        "output_var_name": "output",
+                        "parameter": "Precise",
+                        "presence_penalty": 0.4,
+                        "query": [
+                            {
+                                "component_id": "Answer:LateCamerasSearch",
+                                "type": "reference"
+                            }
+                        ],
+                        "temperature": 0.1,
+                        "top_p": 0.3
+                    }
+                },
+                "upstream": [
+                    "Answer:LateCamerasSearch"
+                ]
+            },
+            "Retrieval:RudeClocksMake": {
+                "downstream": [
+                    "Generate:NewHorsesBuy"
+                ],
+                "obj": {
+                    "component_name": "Retrieval",
+                    "inputs": [],
+                    "output": null,
+                    "params": {
+                        "debug_inputs": [],
+                        "inputs": [],
+                        "kb_ids": [
+                            "13b34d1a0b7a11f0bb724e9d9f862475"
+                        ],
+                        "keywords_similarity_weight": 0.3,
+                        "output": null,
+                        "output_var_name": "output",
+                        "query": [
+                            {
+                                "component_id": "RewriteQuestion:SmartSingersAttend",
+                                "type": "reference"
+                            }
+                        ],
+                        "similarity_threshold": 0.14,
+                        "top_n": 3,
+                        "use_kg": false
+                    }
+                },
+                "upstream": [
+                    "RewriteQuestion:SmartSingersAttend"
+                ]
+            },
+            "Generate:NewHorsesBuy": {
+                "downstream": [
+                    "Answer:LateCamerasSearch"
+                ],
+                "obj": {
+                    "component_name": "Generate",
+                    "inputs": [],
+                    "output": null,
+                    "params": {
+                        "cite": true,
+                        "debug_inputs": [],
+                        "frequency_penalty": 0.7,
+                        "inputs": [],
+                        "llm_id": "qwen-max@Tongyi-Qianwen",
+                        "max_tokens": 256,
+                        "message_history_window_size": 12,
+                        "output": null,
+                        "output_var_name": "output",
+                        "parameters": [],
+                        "presence_penalty": 0.4,
+                        "prompt": "# 知识库智能咨询顾问提示词模板\n*版本：v2.2 | 优化日期：2025年7月18日*\n\n## 角色设定（通用，无需修改）\n你是一名资深的智能咨询顾问，擅长基于企业知识库为用户提供专业、系统的咨询服务。能够结合历史案例和行业经验，用通俗语言为用户提供可落地的解决方案。善于多轮对话，逻辑清晰，注重实用性与可操作性。\n\n## 核心能力（无需修改）\n- 知识库检索与分析：精准理解知识库内容，提取关键信息\n- 案例分析与借鉴：从历史案例中提炼经验教训，指导当前问题解决\n- 系统性问题诊断：运用专业方法论分析问题根因\n- 分层级解决方案：提供管理、技术、流程等多维度改进建议\n- 实施路径规划：制定切实可行的短中长期实施计划\n- 文档对比与优化：当用户上传文档时，对比文档与知识库内容，提供合理性分析与改进建议\n\n## 回答要点（严格遵循）\n1. 严格基于知识库检索返回内容进行回答，不得胡编乱造\n2. 严格按照markdown格式输出\n3. 如果知识库检索返回内容为空，则直接给出\"当前问题建议\"部分，并说明\"知识库中并无与当前问题相关的历史案例，我将基于行业通识给出建议措施，仅供参考！\"\n4. **重要**：只有当用户明确上传了文档、提供了文档内容或要求文档分析时，才输出\"文档对比与优化\"部分\n5. 针对用户上传的文档，提供以下内容：\n   - 文档内容的合理性分析\n   - 与知识库内容的差异点\n   - 改进建议\n\n## 标准输出格式\n知识库检索返回内容为 {Retrieval:RudeClocksMake}\n\n### 有历史案例时的输出格式：\n```markdown\n## 历史案例回顾\n\n### 案例 1：\n- **发生时间**：\n- **相关方**：\n- **问题描述**：\n- **损失情况**：\n- **根本原因**：\n- **改善措施**：\n- **改善效果**：\n\n### 案例 2：\n（如有多个案例，继续列出）\n\n## 当前问题建议\n### 紧急措施（立即执行）：\n- 措施1：具体操作建议\n- 措施2：具体操作建议\n\n### 短期改善（1-3个月）：\n- 措施1：具体操作建议\n- 措施2：具体操作建议\n\n### 中期优化（3-12个月）：\n- 建议1：系统性改进方向\n- 建议2：系统性改进方向\n\n### 长期战略（1年以上）：\n- 建议1：战略性改进方向\n- 建议2：战略性改进方向\n\n## 文档对比与优化（仅当用户上传文档时显示）\n### 文档合理性分析：\n- 分析1：具体分析内容\n- 分析2：具体分析内容\n\n### 与知识库内容的差异点：\n- 差异点1：具体差异描述\n- 差异点2：具体差异描述\n\n### 改进建议：\n- 建议1：具体改进方向\n- 建议2：具体改进方向\n```\n\n### 无历史案例时的输出格式：\n```markdown\n## 当前问题建议\n*知识库中并无与当前问题相关的历史案例，我将基于行业通识给出建议措施，仅供参考！*\n\n### 紧急措施（立即执行）：\n- 措施1：具体操作建议\n- 措施2：具体操作建议\n\n### 短期改善（1-3个月）：\n- 措施1：具体操作建议\n- 措施2：具体操作建议\n\n### 中期优化（3-12个月）：\n- 建议1：系统性改进方向\n- 建议2：系统性改进方向\n\n### 长期战略（1年以上）：\n- 建议1：战略性改进方向\n- 建议2：战略性改进方向\n\n## 文档对比与优化（仅当用户上传文档时显示）\n### 文档合理性分析：\n- 分析1：具体分析内容\n- 分析2：具体分析内容\n\n### 与知识库内容的差异点：\n- 差异点1：具体差异描述\n- 差异点2：具体差异描述\n\n### 改进建议：\n- 建议1：具体改进方向\n- 建议2：具体改进方向\n```\n\n## 分析方法论（标准流程）\n1. 检索内容分析：仔细分析知识库返回内容，提取关键信息\n2. 案例归类整理：将相关案例按时间、类型、影响程度等维度整理\n3. 问题对比分析：将当前问题与历史案例进行对比，找出共性和差异\n4. 经验教训提炼：从历史案例中提炼可借鉴的成功经验和失败教训\n5. 解决方案设计：结合历史经验和当前实际，提出针对性建议\n6. 实施指导：给出具体可行的操作建议和注意事项\n7. 效果评估：明确改善目标的量化指标，定期评估实施效果\n8. 风险评估：识别潜在风险并制定控制措施\n9. 文档对比分析：仅当用户上传文档时，对比用户上传文档与知识库内容，找出差异并提出优化建议\n\n## 领域适配说明\n本模板适用于各类专业咨询场景，包括但不限于：\n- 质量管理与改善\n- 生产运营优化  \n- 技术问题诊断\n- 安全事故分析\n- 客户服务改进\n- 流程优化改善\n- 人力资源管理\n- 财务风险控制\n- 设备维护与管理\n- 文档内容优化",
+                        "query": [],
+                        "temperature": 0.1,
+                        "top_p": 0.3
+                    }
+                },
+                "upstream": [
+                    "Retrieval:RudeClocksMake"
+                ]
+            }
         },
-        "upstream": [
-          "begin",
-          "Generate:BroadBirdsSip"
-        ]
-      },
-      "Feedback:BlockRiversKnow": {
-        "downstream": [
-          "Generate:BroadBirdsSip"
-        ],
-        "obj": {
-          "component_name": "Feedback",
-          "inputs": [],
-          "output": null,
-          "params": {
-            "debug_inputs": [],
-            "empty_response": "您的反馈对我很重要，请告诉我您是否满意我的回答？",
-            "inputs": [],
-            "message_history_window_size": 22,
-            "output": null,
-            "output_var_name": "output",
-            "positive_text": "感谢您的肯定，我会继续努力提供更好的服务！",
-            "query": [
-              {
-                "component_id": "Answer:SoreGrandmasCollide",
-                "type": "reference"
-              }
+        "embed_id": "",
+        "graph": {
+            "edges": [
+                {
+                    "id": "xy-edge__begin-Answer:LateCamerasSearchc",
+                    "markerEnd": "logo",
+                    "source": "begin",
+                    "style": {
+                        "stroke": "rgb(202 197 245)",
+                        "strokeWidth": 2
+                    },
+                    "target": "Answer:LateCamerasSearch",
+                    "targetHandle": "c",
+                    "type": "buttonEdge",
+                    "zIndex": 1001
+                },
+                {
+                    "id": "xy-edge__Answer:LateCamerasSearchb-RewriteQuestion:SmartSingersAttendc",
+                    "markerEnd": "logo",
+                    "source": "Answer:LateCamerasSearch",
+                    "sourceHandle": "b",
+                    "style": {
+                        "stroke": "rgb(202 197 245)",
+                        "strokeWidth": 2
+                    },
+                    "target": "RewriteQuestion:SmartSingersAttend",
+                    "targetHandle": "c",
+                    "type": "buttonEdge",
+                    "zIndex": 1001
+                },
+                {
+                    "id": "xy-edge__RewriteQuestion:SmartSingersAttendb-Retrieval:RudeClocksMakec",
+                    "markerEnd": "logo",
+                    "source": "RewriteQuestion:SmartSingersAttend",
+                    "sourceHandle": "b",
+                    "style": {
+                        "stroke": "rgb(202 197 245)",
+                        "strokeWidth": 2
+                    },
+                    "target": "Retrieval:RudeClocksMake",
+                    "targetHandle": "c",
+                    "type": "buttonEdge",
+                    "zIndex": 1001
+                },
+                {
+                    "id": "xy-edge__Retrieval:RudeClocksMakeb-Generate:NewHorsesBuyb",
+                    "markerEnd": "logo",
+                    "source": "Retrieval:RudeClocksMake",
+                    "sourceHandle": "b",
+                    "style": {
+                        "stroke": "rgb(202 197 245)",
+                        "strokeWidth": 2
+                    },
+                    "target": "Generate:NewHorsesBuy",
+                    "targetHandle": "b",
+                    "type": "buttonEdge",
+                    "zIndex": 1001
+                },
+                {
+                    "id": "xy-edge__Generate:NewHorsesBuyb-Answer:LateCamerasSearchc",
+                    "markerEnd": "logo",
+                    "source": "Generate:NewHorsesBuy",
+                    "sourceHandle": "b",
+                    "style": {
+                        "stroke": "rgb(202 197 245)",
+                        "strokeWidth": 2
+                    },
+                    "target": "Answer:LateCamerasSearch",
+                    "targetHandle": "c",
+                    "type": "buttonEdge",
+                    "zIndex": 1001
+                }
+            ],
+            "nodes": [
+                {
+                    "data": {
+                        "name": "质量助手开场"
+                    },
+                    "id": "begin",
+                    "position": {
+                        "x": -642,
+                        "y": 419
+                    },
+                    "type": "beginNode"
+                },
+                {
+                    "data": {
+                        "name": "对话_0"
+                    },
+                    "id": "Answer:LateCamerasSearch",
+                    "position": {
+                        "x": -331,
+                        "y": 450
+                    },
+                    "type": "logicNode"
+                },
+                {
+                    "data": {
+                        "name": "问题优化"
+                    },
+                    "id": "RewriteQuestion:SmartSingersAttend",
+                    "position": {
+                        "x": -49,
+                        "y": 413
+                    },
+                    "type": "rewriteNode"
+                },
+                {
+                    "data": {
+                        "name": "知识检索_0"
+                    },
+                    "id": "Retrieval:RudeClocksMake",
+                    "position": {
+                        "x": 256,
+                        "y": 367
+                    },
+                    "type": "retrievalNode"
+                },
+                {
+                    "data": {
+                        "name": "生成回答_1"
+                    },
+                    "id": "Generate:NewHorsesBuy",
+                    "position": {
+                        "x": -25,
+                        "y": 109
+                    },
+                    "type": "generateNode"
+                }
             ]
-          }
         },
-        "upstream": [
-          "Answer:SoreGrandmasCollide"
-        ]
-      },
-      "Generate:BroadBirdsSip": {
-        "downstream": [
-          "Answer:SoreGrandmasCollide"
-        ],
-        "obj": {
-          "component_name": "Generate",
-          "inputs": [],
-          "output": null,
-          "params": {
-            "cite": true,
-            "debug_inputs": [],
-            "frequency_penalty": 0.7,
-            "inputs": [],
-            "llm_id": "qwen-max@Tongyi-Qianwen",
-            "max_tokens": 256,
-            "message_history_window_size": 12,
-            "output": null,
-            "output_var_name": "output",
-            "parameters": [],
-            "presence_penalty": 0.4,
-            "prompt": "您是一位专业的顾问，擅长根据用户的反馈来改进自己的回答效果。\n\n当用户表达对您的回答不满意时，请根据他们的反馈，对您的回答进行改进和完善。您需要：\n\n1. 分析用户的反馈，理解用户的真正需求和期望\n2. 思考您之前的回答有哪些不足或不符合用户期望的地方\n3. 根据这些分析，提供一个更加符合用户期望的新回答\n\n在给出新回答之前，请简短说明您是如何调整思路的，例如：\n\"我理解您需要更具体的解决方案。我将调整回答，提供更详细的步骤和方法。\"\n\n请记住，您的目标是通过不断改进来满足用户的需求，而不是坚持您的原始回答。",
-            "temperature": 0.1,
-            "top_p": 0.3
-          }
-        },
-        "upstream": [
-          "Feedback:BlockRiversKnow"
-        ]
-      },
-      "begin": {
-        "downstream": [
-          "Answer:SoreGrandmasCollide"
-        ],
-        "obj": {
-          "component_name": "Begin",
-          "inputs": [],
-          "output": null,
-          "params": {
-            "debug_inputs": [],
-            "inputs": [],
-            "message_history_window_size": 22,
-            "output": null,
-            "output_var_name": "output",
-            "prologue": "你好，我是一个能根据您的反馈持续改进的智能助手。请向我提问，如果您对我的回答不满意，可以随时告诉我，我会尽力调整和改进。",
-            "query": []
-          }
-        },
-        "upstream": []
-      }
+        "history": [],
+        "messages": [],
+        "path": [],
+        "reference": []
     },
-    "embed_id": "",
-    "graph": {
-      "edges": [
-        {
-          "id": "xy-edge__begin-Answer:SoreGrandmasCollidec",
-          "markerEnd": "logo",
-          "source": "begin",
-          "style": {
-            "stroke": "rgb(202 197 245)",
-            "strokeWidth": 2
-          },
-          "target": "Answer:SoreGrandmasCollide",
-          "targetHandle": "c",
-          "type": "buttonEdge",
-          "zIndex": 1001
-        },
-        {
-          "id": "xy-edge__Answer:SoreGrandmasCollideb-Feedback:BlockRiversKnowc",
-          "markerEnd": "logo",
-          "source": "Answer:SoreGrandmasCollide",
-          "sourceHandle": "b",
-          "style": {
-            "stroke": "rgb(202 197 245)",
-            "strokeWidth": 2
-          },
-          "target": "Feedback:BlockRiversKnow",
-          "targetHandle": "c",
-          "type": "buttonEdge",
-          "zIndex": 1001
-        },
-        {
-          "id": "xy-edge__Feedback:BlockRiversKnowb-Generate:BroadBirdsSipb",
-          "markerEnd": "logo",
-          "source": "Feedback:BlockRiversKnow",
-          "sourceHandle": "b",
-          "style": {
-            "strokeWidth": 2,
-            "stroke": "rgb(202 197 245)"
-          },
-          "target": "Generate:BroadBirdsSip",
-          "targetHandle": "b",
-          "type": "buttonEdge",
-          "zIndex": 1001
-        },
-        {
-          "id": "xy-edge__Generate:BroadBirdsSipb-Answer:SoreGrandmasCollidec",
-          "markerEnd": "logo",
-          "source": "Generate:BroadBirdsSip",
-          "sourceHandle": "b",
-          "style": {
-            "strokeWidth": 2,
-            "stroke": "rgb(202 197 245)"
-          },
-          "target": "Answer:SoreGrandmasCollide",
-          "targetHandle": "c",
-          "type": "buttonEdge",
-          "zIndex": 1001
-        }
-      ],
-      "nodes": [
-        {
-          "data": {
-            "name": "Opener"
-          },
-          "dragging": false,
-          "id": "begin",
-          "measured": {
-            "height": 44,
-            "width": 200
-          },
-          "position": {
-            "x": -450.9939673963274,
-            "y": 19.276595744680835
-          },
-          "selected": false,
-          "sourcePosition": "left",
-          "targetPosition": "right",
-          "type": "beginNode"
-        },
-        {
-          "data": {
-            "name": "Interface"
-          },
-          "dragging": false,
-          "id": "Answer:SoreGrandmasCollide",
-          "measured": {
-            "height": 44,
-            "width": 200
-          },
-          "position": {
-            "x": -222.26907192703903,
-            "y": -26.126050420168035
-          },
-          "selected": false,
-          "sourcePosition": "right",
-          "targetPosition": "left",
-          "type": "logicNode"
-        },
-        {
-          "data": {
-            "name": "收集反馈"
-          },
-          "dragging": false,
-          "id": "Feedback:BlockRiversKnow",
-          "measured": {
-            "height": 78,
-            "width": 200
-          },
-          "position": {
-            "x": 48.191500655838126,
-            "y": -33.498454877215765
-          },
-          "selected": false,
-          "sourcePosition": "right",
-          "targetPosition": "left",
-          "type": "feedbackNode"
-        },
-        {
-          "data": {
-            "name": "改进回答"
-          },
-          "dragging": false,
-          "id": "Generate:BroadBirdsSip",
-          "measured": {
-            "height": 102,
-            "width": 200
-          },
-          "position": {
-            "x": -95.01606173710281,
-            "y": -221.66160520607366
-          },
-          "selected": true,
-          "sourcePosition": "right",
-          "targetPosition": "left",
-          "type": "generateNode"
-        }
-      ]
-    },
-    "history": [],
-    "messages": [],
-    "path": [],
-    "reference": []
-  },
-  "avatar": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDUwIDUwIiBmaWxsPSJub25lIj4KICA8cmVjdCB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNDOTQyNDQiIHJ4PSI4Ii8+CiAgPHBvbHlnb24gcG9pbnRzPSIyNS4wLDEyLjUgMzcuNSwzNy41IDEyLjUsMzcuNSIgZmlsbD0id2hpdGUiLz4KPC9zdmc+"
+    "avatar": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDUwIDUwIiBmaWxsPSJub25lIj4KICA8cmVjdCB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiM0Qzc4OUEiIHJ4PSI4Ii8+CiAgPHBhdGggZD0iTTI1IDEwYzguMjg0IDAgMTUgNi43MTYgMTUgMTVzLTYuNzE2IDE1LTE1IDE1UzEwIDMzLjI4NCAxMCAyNSAxNi43MTYgMTAgMjUgMTBaIiBmaWxsPSJ3aGl0ZSIvPgogIDxwYXRoIGQ9Ik0yMCAyMGg0djRoLTR2LTRabTYgMGg0djRoLTR2LTRabS02IDZoNHY0aC00di00Wm02IDBoNHY0aC00di00WiIgZmlsbD0iIzRDNzg5QSIvPgo8L3N2Zz4="
 }
